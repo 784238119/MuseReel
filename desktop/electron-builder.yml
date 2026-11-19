@@ -1,5 +1,5 @@
-appId: com.huobao.drama
-productName: HuobaoDrama
+appId: com.musereel.desktop
+productName: MuseReel
 directories:
   output: release
   buildResources: build
@@ -56,4 +56,4 @@ nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: always
-  shortcutName: HuobaoDrama
+  shortcutName: MuseReel

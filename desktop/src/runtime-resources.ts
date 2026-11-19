@@ -63,7 +63,7 @@ export function stageRuntimeResources(resourcesPath: string, options: RuntimeOpt
     .slice(0, 16)
   const candidates = [
     path.join(options.userDataDir, 'runtime'),
-    ...(options.programDataDir ? [path.join(options.programDataDir, 'HuobaoDrama')] : []),
+    ...(options.programDataDir ? [path.join(options.programDataDir, 'MuseReel')] : []),
   ].filter(isAsciiPath)
   let lastError: unknown = null
 
@@ -73,7 +73,7 @@ export function stageRuntimeResources(resourcesPath: string, options: RuntimeOpt
     try {
       if (ready(directory, signature, options.version)) return directory
       fs.mkdirSync(base, { recursive: true })
-      const probe = path.join(base, `.huobao-write-${process.pid}`)
+      const probe = path.join(base, `.musereel-write-${process.pid}`)
       fs.writeFileSync(probe, 'probe')
       fs.rmSync(probe, { force: true })
 

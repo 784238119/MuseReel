@@ -6,7 +6,7 @@ import path from 'node:path'
 import { assertWindowsX64 } from '../scripts/validate-windows-package.mjs'
 
 test('Windows packaging rejects host Mach-O, truncated PE and x86 binaries', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'huobao-pe-test-'))
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'musereel-pe-test-'))
   const file = path.join(dir, 'module.node')
   try {
     for (const bytes of [Buffer.from([0xcf,0xfa,0xed,0xfe]), Buffer.from('MZ'), Buffer.alloc(64)]) {

@@ -87,7 +87,7 @@ export function startTour(id: string, steps: TourStep[], t: (key: string) => str
     showProgress: true,
     allowClose: true,
     overlayClickBehavior: 'nextStep',
-    popoverClass: 'huobao-tour-popover',
+    popoverClass: 'musereel-tour-popover',
     progressText: '{{current}} / {{total}}',
     nextBtnText: t('tour.next'),
     prevBtnText: t('tour.prev'),

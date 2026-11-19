@@ -1,6 +1,6 @@
 {
   "app": {
-    "title": "Huobao Shorts",
+    "title": "MuseReel",
     "updateAvailable": "New version v{version} is available. Upgrade in Settings → About."
   },
   "characterVoice": {
@@ -370,7 +370,7 @@
       "serverApply": "Update now",
       "serverApplyStarted": "Update triggered: Watchtower will pull the new image and recreate the container. Refresh in a few minutes.",
       "serverApplyFailed": "Failed to trigger update",
-      "serverManualHint": "Server deployment: run this in the deploy directory:",
+      "serverManualHint": "If building from source, update the checkout first. Then run this in the deployment directory:",
       "serverNote": "Note: with Watchtower configured, Docker deployments can update in one click (pulls the new image and recreates the container); otherwise run the command shown above manually."
     },
     "agents": {
@@ -409,7 +409,7 @@
       "addTitle": "Add {type} Service",
       "sub": "Pick a template first — a sensible `Base URL` and default models will be filled in automatically.",
       "name": "Config name",
-      "namePlaceholder": "e.g. Huobao default image service",
+      "namePlaceholder": "e.g. My image service",
       "provider": "Provider",
       "providerPlaceholder": "Select a provider",
       "priority": "Priority",
@@ -917,7 +917,7 @@
     "helpTitle": "Guide",
     "index": {
       "welcome": {
-        "title": "👋 Welcome to Huobao Drama",
+        "title": "👋 Welcome to MuseReel",
         "desc": "Novel → script → assets → storyboard → video → final cut, all in one place. Configure AI services first, then create your first project."
       },
       "create": {

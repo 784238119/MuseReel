@@ -37,18 +37,14 @@ test('settings page exposes official provider templates only', () => {
   assert.doesNotMatch(settingsPage, /https:\/\/dashscope\.aliyuncs\.com/)
   assert.doesNotMatch(settingsPage, /https:\/\/api\.vidu\.com/)
   assert.doesNotMatch(settingsPage, /\['ali'|'ali',|, 'ali'\]/)
-  assert.match(settingsPage, /火宝快捷配置/)
-  assert.match(settingsPage, /https:\/\/api\.firemux\.com/)
-  assert.match(settingsPage, /applyHuobaoQuickConfig/)
   assert.doesNotMatch(settingsPage, /https:\/\/api\.minimax\.io/)
 })
 
 test('settings page offers official default model IDs', () => {
   assert.match(settingsPage, /gemini-3\.1-pro-preview/)
-  assert.match(settingsPage, /gemini-3\.5-flash/)
+  assert.match(settingsPage, /gemini-3\.8-flash/)
   assert.match(settingsPage, /gemini-3-flash-preview/)
   assert.match(settingsPage, /gpt-5\.6-terra/)
-  assert.match(settingsPage, /deepseek-v4-flash/)
   assert.match(settingsPage, /gemini-3-pro-image/)
   assert.match(settingsPage, /gemini-3\.1-flash-image/)
   assert.match(settingsPage, /gpt-image-2/)
@@ -88,11 +84,9 @@ test('settings page offers the supported official provider presets', () => {
   assert.doesNotMatch(settingsPage, /audio:\s*\{/)
 })
 
-test('Huobao quick config includes Wan 3.0 through the Qwen gateway route', () => {
-  const quickStart = settingsPage.indexOf('const huobaoQuickConfigs = [')
-  assert.notEqual(quickStart, -1)
-  const quickConfigs = settingsPage.slice(quickStart, settingsPage.indexOf('\n]', quickStart) + 2)
-  assert.match(quickConfigs, /provider:\s*'aliyun'/)
-  assert.match(quickConfigs, /base_url:\s*'https:\/\/api\.firemux\.com\/qwen'/)
-  assert.match(quickConfigs, /model:\s*\['wan3\.0-video-prime', 'wan3\.0-video'\]/)
+test('settings lists service types with an add action and no setup panels', () => {
+  assert.doesNotMatch(settingsPage, /quick-card|setup-panel|applyHuobaoQuickConfig/)
+  assert.match(settingsPage, /v-for="st in serviceTypes" :key="st.type" class="card svc-group"/)
+  assert.match(settingsPage, /@click="startAddCfg\(st\.type\)"/)
+  assert.match(settingsPage, /if \(firstPreset\) applyProviderPreset\(t, firstPreset\.provider\)/)
 })

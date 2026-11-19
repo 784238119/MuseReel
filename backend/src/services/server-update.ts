@@ -5,19 +5,16 @@
  * - 当前版本：构建时注入 HUOBAO_VERSION（Docker ARG / 环境变量），缺省回退 package.json
  * - 一键更新：仅在配置 Watchtower（HUOBAO_WATCHTOWER_URL）时可用——容器不可变，
  *   容器内自更新是反模式，正确路径是由 Watchtower 拉新镜像并重建本容器；
- *   未配置时前端展示手动更新指引（docker compose pull && up -d）
+ *   未配置时前端展示手动更新指引。
  */
 import { readFileSync } from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
 
-// 双源：COS（国内直连）优先，GitHub（海外）兜底；HUOBAO_UPDATE_FEED 可整体覆盖
+// 默认使用 MuseReel GitHub Releases，可用 HUOBAO_UPDATE_FEED 指定其他清单。
 const FEED_URLS = process.env.HUOBAO_UPDATE_FEED
   ? [process.env.HUOBAO_UPDATE_FEED]
-  : [
-    'https://installer.firemux.site/huobao-drama/latest.json',
-    'https://github.com/chatfire-AI/huobao-drama/releases/latest/download/latest.json',
-  ]
+  : ['https://github.com/784238119/MuseReel/releases/latest/download/latest.json']
 
 const WATCHTOWER_URL = process.env.HUOBAO_WATCHTOWER_URL?.replace(/\/+$/, '')
 const WATCHTOWER_TOKEN = process.env.HUOBAO_WATCHTOWER_TOKEN || ''

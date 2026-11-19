@@ -1,6 +1,6 @@
 {
   "app": {
-    "title": "火宝ショートドラマ",
+    "title": "MuseReel",
     "updateAvailable": "新バージョン v{version} があります。「設定 → 更新について」でアップグレードできます"
   },
   "characterVoice": {
@@ -370,7 +370,7 @@
       "serverApply": "今すぐ更新",
       "serverApplyStarted": "更新を開始しました：Watchtower が新しいイメージを取得してコンテナを再作成します。数分後にページを更新してください",
       "serverApplyFailed": "更新の開始に失敗しました",
-      "serverManualHint": "サーバーデプロイ：デプロイディレクトリで実行してください",
+      "serverManualHint": "ソースからビルドする場合は先にソースを更新し、デプロイディレクトリで実行してください",
       "serverNote": "補足：Watchtower を設定した Docker デプロイではワンクリック更新（新イメージ取得＋コンテナ再作成）が可能です。未設定の場合は表示されたコマンドを手動で実行してください。"
     },
     "agents": {
@@ -409,7 +409,7 @@
       "addTitle": "{type}サービスを追加",
       "sub": "まずテンプレートを選ぶと、適切な `Base URL` とデフォルトモデルが自動入力されます。",
       "name": "設定名",
-      "namePlaceholder": "例：火宝デフォルト画像サービス",
+      "namePlaceholder": "例：マイ画像サービス",
       "provider": "プロバイダー",
       "providerPlaceholder": "プロバイダーを選択",
       "priority": "優先度",
@@ -917,7 +917,7 @@
     "helpTitle": "ガイド",
     "index": {
       "welcome": {
-        "title": "👋 火宝短劇へようこそ",
+        "title": "👋 MuseReel へようこそ",
         "desc": "小説 → 脚本 → アセット → 絵コンテ → 動画 → 完成、すべてワンストップ。まず AI サービスを設定し、最初のプロジェクトを作成しましょう。"
       },
       "create": {

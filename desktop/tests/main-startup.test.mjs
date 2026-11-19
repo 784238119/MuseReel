@@ -79,9 +79,9 @@ test('page load failure reports a visible error instead of leaving a hidden wind
   assert.match(p.errors[0][1],/ERR_CONNECTION_RESET/)
 })
 test('non-ASCII Windows install resources use one short path for backend and media tools', async () => {
-  const shortPath = 'C:\\HUOBAO~1\\resources'
+  const shortPath = 'C:\\MUSERE~1\\resources'
   const p = await boot('healthy', {
-    resourcesPath: 'C:\\用户\\HuobaoDrama\\resources',
+    resourcesPath: 'C:\\用户\\MuseReel\\resources',
     shortPath,
   })
   assert.ok(p.forkArgs()[0].startsWith(shortPath))

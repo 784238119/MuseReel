@@ -5,12 +5,11 @@
       <div class="header-left">
         <button class="brand" @click="navigateTo('/')">
           <div class="brand-mark">
-            <img v-if="showBrandImage" :src="brandLogo" alt="火宝短剧" class="brand-logo" @error="showBrandImage = false" />
-            <span v-else class="brand-fallback">火</span>
+            <img v-if="showBrandImage" :src="brandLogo" alt="" class="brand-logo" @error="showBrandImage = false" />
+            <span v-else class="brand-fallback" aria-hidden="true">M</span>
           </div>
           <div class="brand-text">
-            <span class="brand-name">火宝短剧</span>
-            <span class="brand-sub">Huobao Shorts</span>
+            <span class="brand-name">MuseReel</span>
           </div>
         </button>
       </div>
@@ -29,7 +28,7 @@
       <div class="header-right">
         <a
           class="github-link"
-          href="https://github.com/chatfire-AI/huobao-drama"
+          href="https://github.com/784238119/MuseReel"
           target="_blank"
           rel="noopener"
           aria-label="GitHub"
@@ -144,17 +143,11 @@ watch(locale, checkAiConfigs)
 .brand-text { display: flex; flex-direction: column; align-items: flex-start; line-height: 1.15; }
 .brand-name {
   font-size: 15px; font-weight: 700;
-  /* ChatFire 签名：品牌字标火焰橙渐变 */
   background: var(--accent-gradient);
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
   letter-spacing: -0.01em;
-}
-.brand-sub {
-  font-size: 10px; font-weight: 400;
-  color: var(--text-3); margin-top: 1px;
-  letter-spacing: 0.04em;
 }
 
 /* Nav — pill segmented group */

@@ -4,10 +4,7 @@
 FROM node:22-bookworm-slim AS frontend-build
 WORKDIR /build/frontend
 COPY frontend/package.json frontend/package-lock.json ./
-# lockfile 的 resolved 可能指向带鉴权的私有 registry（开发者本机 .npmrc），镜像内会 401。
-# 构建期删除 resolved 字段（integrity 校验不受影响），让 npm 统一走公共 registry
-RUN node -e "const fs=require('fs');const l=JSON.parse(fs.readFileSync('package-lock.json'));for(const p of Object.values(l.packages||{}))delete p.resolved;fs.writeFileSync('package-lock.json',JSON.stringify(l,null,2))" \
-  && npm ci --no-audit --no-fund --registry=https://registry.npmjs.org
+RUN npm ci --no-audit --no-fund --registry=https://registry.npmjs.org
 COPY frontend/ ./
 RUN npm run generate
 
@@ -15,8 +12,7 @@ RUN npm run generate
 FROM node:22-bookworm AS backend-build
 WORKDIR /build/backend
 COPY backend/package.json backend/package-lock.json ./
-RUN node -e "const fs=require('fs');const l=JSON.parse(fs.readFileSync('package-lock.json'));for(const p of Object.values(l.packages||{}))delete p.resolved;fs.writeFileSync('package-lock.json',JSON.stringify(l,null,2))" \
-  && npm ci --no-audit --no-fund --registry=https://registry.npmjs.org
+RUN npm ci --no-audit --no-fund --registry=https://registry.npmjs.org
 COPY backend/ ./
 # 运行时与既有服务器部署一致走 tsx（源码存在 bundler 风格无扩展名 import，tsc 产物 node 直跑不可行）；
 # tsx 是 devDependency，prune 后单独补装

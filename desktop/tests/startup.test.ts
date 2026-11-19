@@ -30,7 +30,7 @@ test('quitting prevents more health requests', async () => {
   await assert.rejects(waitForBackend(1, 1000, () => true), /取消/)
 })
 test('startup log preserves errors but removes signed URLs and credentials and rotates', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'huobao-startup-log-'))
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'musereel-startup-log-'))
   try {
     fs.writeFileSync(path.join(dir, 'startup.log'), 'x'.repeat(2 * 1024 * 1024 + 1))
     const log = createStartupLog(dir)

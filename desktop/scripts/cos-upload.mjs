@@ -7,8 +7,8 @@
  *
  * 密钥来源(按优先级): 命令行环境变量 > desktop/.env.local
  *   TENCENT_SECRET_ID / TENCENT_SECRET_KEY
- * 桶与地域(可用环境变量覆盖):
- *   COS_BUCKET(默认 huobao-installer-1304922933)/ COS_REGION(默认 ap-guangzhou)
+ * 桶与地域:
+ *   COS_BUCKET / COS_REGION(默认 ap-guangzhou)
  *
  * 签名: q-sign-algorithm=sha1(腾讯云 COS XML API 鉴权规范),
  * 只签 host 头,其余头(Cache-Control 等)透传不参与签名。
@@ -34,7 +34,7 @@ loadEnvLocal()
 
 const SECRET_ID = process.env.TENCENT_SECRET_ID
 const SECRET_KEY = process.env.TENCENT_SECRET_KEY
-const BUCKET = process.env.COS_BUCKET || 'huobao-installer-1304922933'
+const BUCKET = process.env.COS_BUCKET
 const REGION = process.env.COS_REGION || 'ap-guangzhou'
 const HOST = `${BUCKET}.cos.${REGION}.myqcloud.com`
 
@@ -104,8 +104,8 @@ export async function cosDelete(key) {
 // ---- CLI ----
 const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
 if (isMain) {
-  if (!SECRET_ID || !SECRET_KEY) {
-    console.error('缺少 TENCENT_SECRET_ID / TENCENT_SECRET_KEY(写入 desktop/.env.local 或环境变量)')
+  if (!SECRET_ID || !SECRET_KEY || !BUCKET) {
+    console.error('缺少 TENCENT_SECRET_ID、TENCENT_SECRET_KEY 或 COS_BUCKET（写入 desktop/.env.local 或环境变量）')
     process.exit(1)
   }
   const args = process.argv.slice(2)

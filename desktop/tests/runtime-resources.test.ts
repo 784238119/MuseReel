@@ -21,13 +21,13 @@ function makeResources(root: string): string {
 }
 
 test('ASCII detection only accepts paths safe for native runtime loading', () => {
-  assert.equal(isAsciiPath('C:\\Program Files\\HuobaoDrama'), true)
-  assert.equal(isAsciiPath('C:\\用户\\HuobaoDrama'), false)
-  assert.equal(isAsciiPath('D:\\应用\\HuobaoDrama'), false)
+  assert.equal(isAsciiPath('C:\\Program Files\\MuseReel'), true)
+  assert.equal(isAsciiPath('C:\\用户\\MuseReel'), false)
+  assert.equal(isAsciiPath('D:\\应用\\MuseReel'), false)
 })
 
 test('runtime staging copies every backend dependency, reuses cache and refreshes on package change', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'huobao-runtime-'))
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'musereel-runtime-'))
   try {
     const resources = makeResources(root)
     const options = { version: '1.0.0', userDataDir: path.join(root, 'userData') }
@@ -55,17 +55,17 @@ test('runtime staging copies every backend dependency, reuses cache and refreshe
 })
 
 test('a Chinese user profile falls back to an ASCII ProgramData runtime cache', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'huobao-runtime-fallback-'))
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'musereel-runtime-fallback-'))
   try {
     const resources = makeResources(root)
     const programData = path.join(root, 'ProgramData')
     const staged = stageRuntimeResources(resources, {
       version: '1.0.0',
-      userDataDir: path.join(root, '中文用户', 'HuobaoDrama'),
+      userDataDir: path.join(root, '中文用户', 'MuseReel'),
       programDataDir: programData,
     })
     assert.equal(isAsciiPath(staged), true)
-    assert.ok(staged.startsWith(path.join(programData, 'HuobaoDrama')))
+    assert.ok(staged.startsWith(path.join(programData, 'MuseReel')))
   } finally {
     fs.rmSync(root, { recursive: true, force: true })
   }

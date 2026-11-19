@@ -13,6 +13,7 @@ import { now } from '../utils/response.js'
 import { downloadFile, fetchImageAsCompressedDataUrl, generateImageThumb, readImageAsCompressedDataUrl, readImageAsDataUrl, saveBase64Image } from '../utils/storage.js'
 import { extractVideoPoster } from '../utils/video-poster.js'
 import { getImageAdapter, getVideoAdapter } from './adapters/registry'
+import { isRetryablePollStatus } from './poll-policy'
 import type { AIConfig } from './adapters/types'
 import { logTaskError, logTaskPayload, logTaskProgress, logTaskStart, logTaskSuccess, logTaskWarn, redactUrl } from '../utils/task-logger.js'
 
@@ -407,7 +408,20 @@ async function pollTask(record: SysTaskRecord, config: AIConfig, taskId: string)
         headers,
         signal: AbortSignal.timeout(remainingMs),
       })
-      if (!resp.ok) continue
+      if (!resp.ok) {
+        const detail = (await resp.text().catch(() => '')).trim().slice(0, 500)
+        if (!isRetryablePollStatus(resp.status)) {
+          await failTask(record.id, `Polling HTTP ${resp.status}${detail ? `: ${detail}` : ''}`, 'poll_failed')
+          return
+        }
+        logTaskWarn(label, 'poll-retry', {
+          id: record.id,
+          taskId,
+          attempt: i + 1,
+          status: resp.status,
+        })
+        continue
+      }
       const result = await resp.json() as any
 
       // 图片/视频 PollResponse 结构不同，这里统一按 any 取值后按 type 分支

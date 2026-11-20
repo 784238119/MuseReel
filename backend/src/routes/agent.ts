@@ -7,6 +7,7 @@ import { buildAgentRequestContext } from '../agents/context.js'
 import { mastra } from '../mastra/index.js'
 import { success, badRequest } from '../utils/response.js'
 import { logTaskError, logTaskPayload, logTaskProgress, logTaskStart, logTaskSuccess } from '../utils/task-logger.js'
+import { beginEpisodeProduction } from '../services/project-scripts.js'
 
 const app = new Hono()
 
@@ -55,6 +56,7 @@ app.post('/:type/chat', async (c) => {
     logTaskError('Agent', agentType, { reason: 'agent not found' })
     return badRequest(c, 'Agent 不存在')
   }
+  beginEpisodeProduction(Number(drama_id), Number(episode_id))
 
   const requestContext = buildAgentRequestContext({
     episodeId: episode_id,

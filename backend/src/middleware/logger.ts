@@ -21,6 +21,11 @@ function formatTime(): string {
   return new Date().toLocaleTimeString('zh-CN', { hour12: false })
 }
 
+function isCreativeWrite(method: string, path: string) {
+  return /^\/api\/v1\/dramas\/[^/]+\/script(?:\/|$)/.test(path)
+    || (method === 'POST' && /^\/api\/v1\/dramas(?:\/script-import-preview|\/[^/]+\/novel-jobs)?\/?$/.test(path))
+}
+
 /**
  * 全局日志中间件 — 打印请求方法/路径/状态/耗时/请求体
  */
@@ -34,7 +39,7 @@ export const requestLogger: MiddlewareHandler = async (c, next) => {
   let bodyInfo = ''
   // 上传文件不克隆/读取请求体：避免记录音频内容，也让路由的大小限制先执行。
   const isFileUpload = c.req.header('content-type')?.toLowerCase().startsWith('multipart/form-data')
-  if (!isFileUpload && ['POST', 'PUT', 'PATCH'].includes(method)) {
+  if (!isFileUpload && !isCreativeWrite(method, path) && ['POST', 'PUT', 'PATCH'].includes(method)) {
     try {
       const clone = c.req.raw.clone()
       const text = await clone.text()

@@ -30,6 +30,7 @@ export const episodes = sqliteTable('episodes', {
   title: text('title').notNull(),
   content: text('content'),
   scriptContent: text('script_content'),
+  productionStartedAt: text('production_started_at'),
   description: text('description'),
   duration: integer('duration').default(0),
   status: text('status').default('draft'),
@@ -42,6 +43,89 @@ export const episodes = sqliteTable('episodes', {
   updatedAt: text('updated_at').notNull(),
   deletedAt: text('deleted_at'),
 })
+
+export const projectScripts = sqliteTable('project_scripts', {
+  dramaId: integer('drama_id').primaryKey(),
+  outline: text('outline').notNull(),
+  revision: integer('revision').notNull().default(1),
+})
+
+export const scriptJobs = sqliteTable('script_jobs', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  dramaId: integer('drama_id').notNull(),
+  requestId: text('request_id').notNull().unique(),
+  kind: text('kind').notNull(),
+  payload: text('payload').notNull(),
+  configId: integer('config_id').notNull(),
+  model: text('model').notNull(),
+  count: integer('count').notNull(),
+  status: text('status').notNull(),
+  stage: text('stage').notNull(),
+  outline: text('outline'),
+  analysis: text('analysis'),
+  analyzedParts: integer('analyzed_parts').notNull().default(0),
+  runToken: text('run_token'),
+  leaseExpiresAt: integer('lease_expires_at'),
+  errorCode: text('error_code'),
+  createdAt: text('created_at').notNull(),
+})
+
+export const scriptJobEpisodes = sqliteTable('script_job_episodes', {
+  jobId: integer('job_id').notNull(),
+  ordinal: integer('ordinal').notNull(),
+  title: text('title'),
+  raw: text('raw'),
+  script: text('script'),
+  episodeId: integer('episode_id'),
+}, t => [primaryKey({ columns: [t.jobId, t.ordinal] })])
+
+export const novelJobs = sqliteTable('novel_jobs', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  dramaId: integer('drama_id').notNull(),
+  requestId: text('request_id').notNull(),
+  brief: text('brief').notNull(),
+  projectContext: text('project_context').notNull(),
+  episodeCount: integer('episode_count'),
+  targetLength: integer('target_length'),
+  configId: integer('config_id'),
+  model: text('model'),
+  contentLanguage: text('content_language').notNull(),
+  imageConfigId: integer('image_config_id'),
+  videoConfigId: integer('video_config_id'),
+  status: text('status').notNull(),
+  stage: text('stage').notNull(),
+  workflowMode: text('workflow_mode').notNull().default('automatic'),
+  sourceType: text('source_type').notNull().default('legacy'),
+  draftCount: integer('draft_count').notNull().default(0),
+  draftDone: integer('draft_done').notNull().default(0),
+  optimizedDone: integer('optimized_done').notNull().default(0),
+  storyPlan: text('story_plan'),
+  outline: text('outline'),
+  completedChapters: integer('completed_chapters').notNull().default(0),
+  errorCode: text('error_code'),
+  runToken: text('run_token'),
+  leaseExpiresAt: integer('lease_expires_at'),
+  createdAt: text('created_at').notNull(),
+  updatedAt: text('updated_at').notNull(),
+})
+
+export const novelChapters = sqliteTable('novel_chapters', {
+  jobId: integer('job_id').notNull(),
+  chapterNumber: integer('chapter_number').notNull(),
+  title: text('title').notNull(),
+  content: text('content').notNull(),
+  summary: text('summary').notNull(),
+  episodeId: integer('episode_id'),
+}, t => [primaryKey({ columns: [t.jobId, t.chapterNumber] })])
+
+export const novelManuscriptParts = sqliteTable('novel_manuscript_parts', {
+  jobId: integer('job_id').notNull(),
+  partNumber: integer('part_number').notNull(),
+  draft: text('draft').notNull(),
+  optimized: text('optimized'),
+  summary: text('summary'),
+  analysis: text('analysis'),
+}, t => [primaryKey({ columns: [t.jobId, t.partNumber] })])
 
 export const characters = sqliteTable('characters', {
   id: integer('id').primaryKey({ autoIncrement: true }),

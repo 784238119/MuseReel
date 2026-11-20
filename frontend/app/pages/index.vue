@@ -143,7 +143,7 @@
       <button v-if="!dramas.length" class="btn btn-primary" @click="showCreate = true">{{ t('index.create') }}</button>
     </div>
 
-    <div v-if="showCreate" class="overlay" @click.self="showCreate = false">
+    <div v-if="showCreate" class="overlay" @click.self="!submitting && (showCreate = false)">
       <div class="dialog create-dialog">
         <div class="dialog-head">
           <div class="modal-icon">
@@ -154,33 +154,43 @@
           </div>
           <div class="dialog-head-copy">
             <h2 class="dialog-title">{{ t('index.createDialog.title') }}</h2>
-            <p class="dialog-desc">{{ t('index.createDialog.desc') }}</p>
           </div>
         </div>
         <form @submit.prevent="create" class="dialog-form">
           <div class="dialog-body">
+            <div class="create-script-tabs" role="group" :aria-label="t('projectScript.title')">
+              <button v-for="mode in ['ai', 'upload']" :key="mode" type="button" class="btn"
+                :class="{ 'btn-primary': scriptMode === mode }" :aria-pressed="scriptMode === mode"
+                :disabled="submitting" @click="scriptMode = mode">{{ t(`projectScript.modes.${mode}`) }}</button>
+            </div>
             <label class="field">
               <span class="field-label">{{ t('index.createDialog.name') }} <span class="required">*</span></span>
               <input v-model="form.title" class="input" :placeholder="t('index.createDialog.namePlaceholder')" required autofocus />
             </label>
-            <label class="field">
-              <span class="field-label">{{ t('index.createDialog.style') }}</span>
-              <BaseSelect v-model="form.style" :options="styleSelectOptions" :placeholder="t('index.createDialog.stylePlaceholder')" searchable />
-              <span v-if="selectedStyleDesc" class="field-hint">{{ selectedStyleDesc }}</span>
+            <label v-if="scriptMode === 'ai'" class="field">
+              <span class="field-label">{{ t('projectScript.idea') }}</span>
+              <textarea v-model="scriptIdea" class="textarea" rows="4" maxlength="8000"
+                :placeholder="t('projectScript.ideaPlaceholder')" required />
             </label>
-            <label class="field">
-              <span class="field-label">{{ t('index.createDialog.aspectRatio') }}</span>
-              <BaseSelect v-model="form.aspect_ratio" :options="aspectRatioOptions" :placeholder="t('index.createDialog.aspectRatioPlaceholder')" />
-              <span class="field-hint">{{ t('index.createDialog.aspectRatioHint') }}</span>
-            </label>
+            <ScriptSourceInput v-else v-model="scriptText" v-model:state="importState" />
+            <ScriptJobOptions v-model="scriptOptions" :import-count="scriptMode === 'upload' ? importState.count : null" />
+            <div class="field-row create-visual-fields">
+              <label class="field">
+                <span class="field-label">{{ t('index.createDialog.style') }}</span>
+                <BaseSelect v-model="form.style" :options="styleSelectOptions" :placeholder="t('index.createDialog.stylePlaceholder')" searchable />
+                <span v-if="selectedStyleDesc" class="field-hint">{{ selectedStyleDesc }}</span>
+              </label>
+              <label class="field">
+                <span class="field-label">{{ t('index.createDialog.aspectRatio') }}</span>
+                <BaseSelect v-model="form.aspect_ratio" :options="aspectRatioOptions" :placeholder="t('index.createDialog.aspectRatioPlaceholder')" />
+                <span class="field-hint">{{ t('index.createDialog.aspectRatioHint') }}</span>
+              </label>
+            </div>
           </div>
           <div class="dialog-foot">
-            <button type="button" class="btn" @click="showCreate = false">{{ t('common.cancel') }}</button>
-            <button type="submit" class="btn btn-primary">
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
-                <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-              </svg>
-              {{ t('index.createDialog.submit') }}
+            <button type="button" class="btn" :disabled="submitting" @click="showCreate = false">{{ t('common.cancel') }}</button>
+            <button type="submit" class="btn btn-primary" :disabled="!canCreate || submitting">
+              {{ t(submitting ? 'projectScript.submitting' : scriptMode === 'ai' ? 'projectScript.createAI' : 'projectScript.createUpload') }}
             </button>
           </div>
         </form>
@@ -206,7 +216,7 @@ import { dramaAPI, stylePresetAPI } from '~/composables/useApi'
 import BaseSelect from '~/components/BaseSelect.vue'
 import { startTour, autoTour } from '~/composables/useTour'
 
-const { t, locale } = useI18n()
+const { t, te, locale } = useI18n()
 
 const dramas = ref([])
 const loading = ref(false)
@@ -222,6 +232,14 @@ const activeMenuId = ref(null)
 const dramaToDelete = ref(null)
 const deletingDrama = ref(false)
 const form = ref({ title: '', style: '', aspect_ratio: '16:9' })
+const scriptMode = ref('ai')
+const scriptIdea = ref('')
+const scriptText = ref('')
+const scriptOptions = ref({})
+const importState = ref({})
+const { submitting, submit } = useScriptSubmission()
+const canCreate = computed(() => form.value.title.trim() && scriptOptions.value.model
+  && (scriptMode.value === 'ai' ? scriptIdea.value.trim() : importState.value.ready))
 const stylePresets = ref([])
 const styleSelectOptions = computed(() => stylePresets.value.map(p => ({ label: p.name, value: p.value })))
 const selectedStyleDesc = computed(() => stylePresets.value.find(p => p.value === form.value.style)?.description || '')
@@ -304,13 +322,27 @@ async function load() {
 }
 
 async function create() {
-  if (!form.value.title?.trim()) return
+  if (!canCreate.value) return
+  const input = {
+    ...scriptOptions.value, source_type: scriptMode.value,
+    ...(scriptMode.value === 'ai' ? { idea: scriptIdea.value.trim() }
+      : { source_text: scriptText.value, continuous: importState.value.continuous }),
+  }
   try {
-    const d = await dramaAPI.create(form.value)
+    const d = await submit({ ...form.value, input }, request_id => dramaAPI.create({
+      ...form.value, script_creation: { ...input, request_id },
+    }))
+    if (!d) return
     showCreate.value = false
-    navigateTo(`/drama/${d.id}`)
+    form.value.title = ''
+    scriptIdea.value = ''
+    scriptText.value = ''
+    navigateTo({ path: `/drama/${d.id}`, query: { tab: 'script' } })
   } catch (e) {
-    toastError(e)
+    const key = `projectScript.errors.${e.message}`
+    if (te(key)) toast.error(t(key))
+    else if (te(`novel.errors.${e.message}`)) toast.error(t(`novel.errors.${e.message}`))
+    else toastError(e)
   }
 }
 
@@ -614,7 +646,12 @@ onMounted(() => setTimeout(() => autoTour('index', INDEX_TOUR, t), 600))
 .empty-title { font-size: 14px; font-weight: 600; color: var(--text-1); }
 .empty-desc { font-size: 12px; color: var(--text-3); max-width: 240px; line-height: 1.6; }
 
-.create-dialog { width: 460px; max-width: calc(100vw - 32px); }
+.create-dialog { width: 740px; max-width: calc(100vw - 32px); max-height: calc(100dvh - 32px); }
+.create-script-tabs { display: flex; gap: 10px; flex-wrap: wrap; }
+.create-script-tabs .btn { flex: 1; }
+.create-dialog textarea { width: 100%; resize: vertical; }
+.create-dialog .dialog-body { min-height: 0; overflow-y: auto; }
+@media (max-width: 540px) { .create-dialog .create-visual-fields { grid-template-columns: 1fr; } }
 .dialog-head-copy { display: flex; flex-direction: column; gap: 2px; }
 .dialog-desc { font-size: 12.5px; color: var(--text-3); }
 .modal-icon {

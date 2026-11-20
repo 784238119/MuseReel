@@ -1,10 +1,33 @@
 import { Hono } from 'hono'
-import { and, eq, isNull, like, desc } from 'drizzle-orm'
+import { and, eq, isNull, desc, getTableColumns, sql } from 'drizzle-orm'
 import { db, getInsertId, schema } from '../db/index.js'
-import { success, badRequest, notFound, created, now } from '../utils/response.js'
+import { success, badRequest, notFound, created, now, serverError } from '../utils/response.js'
 import { toSnakeCase, toSnakeCaseArray } from '../utils/transform.js'
+import novels from './novels.js'
+import { projectScript, importPreview, scriptCreation, scriptBodyLimit } from './projectScripts.js'
+import { enqueueScript, launchScript } from '../services/project-scripts.js'
+import { inspectScriptImport } from '../services/script-import.js'
+import { resolveNovelModel } from '../services/novels.js'
+import { getContentLanguage } from '../services/app-settings.js'
 
 const app = new Hono()
+app.route('/:id/novel-jobs', novels)
+app.route('/script-import-preview', importPreview)
+app.route('/:id/script', projectScript)
+
+const { episodes } = schema
+const { content, scriptContent, ...episodeSummary } = getTableColumns(episodes)
+
+function listEpisodes(dramaId: number, summary: boolean) {
+  const filter = and(eq(episodes.dramaId, dramaId), isNull(episodes.deletedAt))
+  if (summary) {
+    return db.select({
+      ...episodeSummary,
+      hasScript: sql<boolean>`coalesce(${scriptContent}, '') <> ''`.mapWith(Boolean),
+    }).from(episodes).where(filter).all()
+  }
+  return db.select().from(episodes).where(filter).all()
+}
 
 // GET /dramas - List dramas
 app.get('/', async (c) => {
@@ -12,6 +35,7 @@ app.get('/', async (c) => {
   const pageSize = Number(c.req.query('page_size') || 20)
   const status = c.req.query('status')
   const keyword = c.req.query('keyword')
+  const episodeSummaryOnly = c.req.query('episode_summary') === '1'
 
   const allRows = await db.select().from(schema.dramas)
     .where(isNull(schema.dramas.deletedAt))
@@ -26,8 +50,7 @@ app.get('/', async (c) => {
 
   // Attach episode/character/scene counts
   const enriched = await Promise.all(items.map(async (drama) => {
-    const eps = await db.select().from(schema.episodes)
-      .where(and(eq(schema.episodes.dramaId, drama.id), isNull(schema.episodes.deletedAt)))
+    const eps = listEpisodes(drama.id, episodeSummaryOnly)
     const chars = await db.select().from(schema.characters)
       .where(eq(schema.characters.dramaId, drama.id))
     const scns = await db.select().from(schema.scenes)
@@ -49,11 +72,12 @@ app.get('/', async (c) => {
 })
 
 // POST /dramas - Create drama
-app.post('/', async (c) => {
-  const body = await c.req.json()
+app.post('/', scriptBodyLimit, async (c) => {
+  const body = await c.req.json().catch(() => null)
+  if (!body || typeof body.title !== 'string' || !body.title.trim()) return badRequest(c, 'invalid_request')
   const ts = now()
-  const res = await db.insert(schema.dramas).values({
-    title: body.title,
+  const project = {
+    title: body.title.trim(),
     description: body.description,
     genre: body.genre,
     style: body.style,
@@ -63,7 +87,43 @@ app.post('/', async (c) => {
     status: 'draft',
     createdAt: ts,
     updatedAt: ts,
-  })
+  }
+  if (body.script_creation !== undefined) {
+    const parsed = scriptCreation.safeParse(body.script_creation)
+    if (!parsed.success) return badRequest(c, 'invalid_request')
+    const input = parsed.data
+    const detected = input.source_type === 'upload' && !input.continuous ? inspectScriptImport(input.source_text) : null
+    if (detected?.mode === 'invalid') return badRequest(c, 'invalid_episode_headings')
+    try {
+      const result = db.transaction(tx => {
+        const jobs = schema.scriptJobs
+        const existing = tx.select({ project: schema.dramas }).from(jobs)
+          .innerJoin(schema.dramas, eq(schema.dramas.id, jobs.dramaId))
+          .where(and(eq(jobs.requestId, input.request_id), eq(jobs.kind, 'initial'))).get()
+        if (existing) return existing
+        if (!resolveNovelModel(input.config_id, input.model)) return null
+        const row = tx.insert(schema.dramas).values(project).returning().get()
+        const job = enqueueScript(tx, {
+          dramaId: row.id, kind: 'initial', requestId: input.request_id,
+          count: detected?.mode === 'numbered' ? detected.parts.length : input.episode_count,
+          configId: input.config_id, model: input.model,
+          payload: {
+            language: getContentLanguage(), seconds: input.duration,
+            ...(input.source_type === 'ai' ? { idea: input.idea } : { source: input.source_text, continuous: input.continuous }),
+          },
+        })
+        return { project: row, job }
+      }, { behavior: 'immediate' })
+      if (!result) return badRequest(c, 'model_unavailable')
+      if (result.project.deletedAt) return notFound(c)
+      if ('job' in result && result.job) launchScript(result.job.id, result.job.runToken)
+      return created(c, toSnakeCase(result.project))
+    } catch (error) {
+      console.error('[project-script] create', (error as Error).name)
+      return serverError(c)
+    }
+  }
+  const res = await db.insert(schema.dramas).values(project)
 
   const [result] = await db.select().from(schema.dramas)
     .where(eq(schema.dramas.id, getInsertId(res)))
@@ -91,8 +151,7 @@ app.get('/:id', async (c) => {
   const [drama] = await db.select().from(schema.dramas).where(eq(schema.dramas.id, id))
   if (!drama) return notFound(c, '剧本不存在')
 
-  const eps = await db.select().from(schema.episodes)
-    .where(and(eq(schema.episodes.dramaId, id), isNull(schema.episodes.deletedAt)))
+  const eps = listEpisodes(id, c.req.query('episode_summary') === '1')
   const chars = await db.select().from(schema.characters)
     .where(eq(schema.characters.dramaId, id))
   const scns = await db.select().from(schema.scenes)
@@ -108,6 +167,22 @@ app.get('/:id', async (c) => {
     scenes: toSnakeCaseArray(scns),
     props: toSnakeCaseArray(prps),
   })
+})
+
+app.get('/:id/episodes/:episodeNumber', c => {
+  const dramaId = Number(c.req.param('id'))
+  const episodeNumber = Number(c.req.param('episodeNumber'))
+  const expectedId = c.req.query('episode_id')
+  const row = db.select({ episode: episodes }).from(episodes)
+    .innerJoin(schema.dramas, eq(schema.dramas.id, episodes.dramaId))
+    .where(and(
+      eq(episodes.dramaId, dramaId),
+      eq(episodes.episodeNumber, episodeNumber),
+      isNull(episodes.deletedAt),
+      isNull(schema.dramas.deletedAt),
+      expectedId === undefined ? undefined : eq(episodes.id, Number(expectedId)),
+    )).get()
+  return row ? success(c, toSnakeCase(row.episode)) : notFound(c, '剧集不存在')
 })
 
 // PUT /dramas/:id - Update drama

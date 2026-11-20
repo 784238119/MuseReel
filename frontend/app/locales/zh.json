@@ -1,4 +1,154 @@
 {
+  "projectScript": {
+    "title": "剧本",
+    "video": "视频制作",
+    "directory": "剧本目录",
+    "outline": "剧本大纲",
+    "episode": "第 {n} 集",
+    "previewEpisode": "本批第 {n} 集 · 预览",
+    "review": "改写预览",
+    "originalUpload": "上传原稿",
+    "add": "添加剧集",
+    "continueAI": "续写后续集",
+    "historyNovel": "历史小说",
+    "useNovel": "载入原稿",
+    "rewrite": "AI 改写本集",
+    "rewriteIdea": "想怎么修改这一集？",
+    "continueIdea": "续写方向（可选）",
+    "generate": "开始生成",
+    "edit": "编辑",
+    "produce": "进入制作",
+    "before": "当前剧本",
+    "after": "改写建议",
+    "apply": "应用改写",
+    "discard": "放弃改写",
+    "episodeTitle": "本集标题",
+    "episodeScript": "分集剧本",
+    "emptyEpisode": "这集还没有剧本。",
+    "emptyOutline": "还没有项目大纲。可编辑大纲，或添加剧集时输入故事设定。",
+    "loading": "正在加载…",
+    "sourceText": "剧本内容",
+    "sourcePlaceholder": "粘贴已分集剧本或连续正文",
+    "file": "选择 TXT 或 Markdown 文件",
+    "inspecting": "正在识别剧集…",
+    "detected": "已识别 {count} 集，按原有集界导入",
+    "untitled": "未命名",
+    "invalidAt": "第 {line} 行的集号不连续、重复或没有正文。",
+    "asContinuous": "按连续正文处理",
+    "count": "目标集数",
+    "duration": "单集目标时长",
+    "idea": "创意",
+    "ideaPlaceholder": "描述题材、主角和故事冲突",
+    "createAI": "创建并生成",
+    "createUpload": "上传并创建",
+    "submitting": "正在创建…",
+    "modes": {
+      "upload": "上传剧本",
+      "ai": "生成剧本"
+    },
+    "outlineFields": {
+      "synopsis": "故事简介",
+      "characters": "人物小传",
+      "arc": "剧情走向"
+    },
+    "durations": {
+      "30–60s": "30–60 秒",
+      "1–2m": "1–2 分钟",
+      "2–3m": "2–3 分钟"
+    },
+    "stages": {
+      "outline": "正在整理大纲",
+      "writing": "正在准备分集剧本",
+      "publishing": "正在写入剧集列表"
+    },
+    "errors": {
+      "production_locked": "已进入制作，剧本在此处只读。",
+      "script_conflict": "剧本已变化，请刷新后再操作。",
+      "outline_required": "请先保存大纲或填写续写方向。",
+      "pending_review": "请先应用或放弃当前改写。",
+      "invalid_script": "请使用带场景标题的剧本，例如「## S01 | 内景 · 车站 | 清晨」。",
+      "invalid_episode_headings": "请检查集号和正文，或选择按连续正文处理。"
+    }
+  },
+  "novel": {
+    "title": "小说创作",
+    "brief": "创作设定",
+    "briefPlaceholder": "描述故事背景、主角和主要冲突，也可以写下希望的结局。",
+    "episodeCount": "目标集数",
+    "targetLength": "每集目标字数",
+    "model": "文本模型",
+    "appendHint": "系统会先润色全文，再按目标集数分集，追加到项目。",
+    "history": "创作记录",
+    "progress": "已完成 {done}/{total} 章",
+    "retry": "继续生成",
+    "keepModel": "沿用 {model}",
+    "chapters": "章节目录",
+    "openEpisode": "打开第 {n} 集",
+    "reloadChapter": "重新加载章节",
+    "reloadModels": "重新加载模型",
+    "states": {
+      "planning": "正在规划",
+      "writing": "正在写作",
+      "publishing": "正在创建分集",
+      "completed": "小说与分集已完成",
+      "failed": "生成暂停",
+      "interrupted": "生成中断",
+      "analyzing": "正在通读原稿",
+      "optimizing": "正在润色全文",
+      "splitting": "正在按剧情分集",
+      "ready": "原稿已保存，可预览并分集。"
+    },
+    "errors": {
+      "models_load_failed": "文本模型列表加载失败。",
+      "model_unavailable": "请在设置中配置并启用所选文本模型。",
+      "image_unavailable": "请先启用图片生成配置。",
+      "video_unavailable": "请先启用视频生成配置。",
+      "job_running": "该项目已有小说正在生成。",
+      "invalid_request": "请检查创作设定、集数、篇幅和模型。",
+      "invalid_output": "模型返回的内容格式不完整，可从保存点继续。",
+      "truncated": "模型输出被截断，可从保存点继续。",
+      "generation_failed": "文本模型调用失败，请检查模型配置后继续。",
+      "timeout": "模型调用超时，可从保存点继续。",
+      "publish_failed": "分集创建失败，已保存正文，可重试。",
+      "project_unavailable": "项目已不可用。",
+      "interrupted": "服务已重启，可从保存点继续。",
+      "load_failed": "加载失败，请稍后重试。",
+      "source_too_large": "导入正文不能超过 5 MiB。",
+      "invalid_file": "请选择含正文的 UTF-8 TXT 或 Markdown 文件。",
+      "manuscript_too_short": "正文不足以分成目标集数，请减少集数后再分集。",
+      "draft_not_ready": "原稿尚未就绪。"
+    },
+    "sources": {
+      "ai": "AI 创作",
+      "import": "导入小说"
+    },
+    "sourceText": "小说正文",
+    "sourcePlaceholder": "粘贴小说正文，或从文件导入。",
+    "file": "选择文件（UTF-8 TXT / Markdown，最多 5 MiB）",
+    "manuscripts": "稿件版本",
+    "versions": {
+      "draft": "原稿",
+      "optimized": "优化稿",
+      "episodes": "分集"
+    },
+    "previous": "上一段",
+    "next": "下一段",
+    "part": "第 {part} / {total} 段",
+    "loading": "正在加载正文…",
+    "partProgress": "已完成 {done}/{total} 段",
+    "episodeProgress": "已完成 {done}/{total} 集",
+    "splitAgent": "小说分集",
+    "prepare": "准备小说",
+    "generateDraft": "生成小说",
+    "saveDraft": "保存并预览",
+    "preview": "小说预览",
+    "newNovel": "新建小说",
+    "totalLength": "目标总字数",
+    "splitNow": "一键分集",
+    "viewEpisodes": "查看剧集",
+    "published": "已创建 {count} 集 · 第 {range} 集",
+    "reload": "重新加载"
+  },
   "app": {
     "title": "MuseReel",
     "updateAvailable": "发现新版本 v{version}，可在「设置 → 关于更新」中升级"
@@ -152,7 +302,7 @@
     },
     "createDialog": {
       "title": "新建项目",
-      "desc": "创建后进入项目页选择集",
+      "desc": "创建后可用 AI 创作小说或导入已有小说",
       "name": "项目名称",
       "namePlaceholder": "例如：都市情感短剧《时光邮局》",
       "style": "视觉风格",
@@ -457,6 +607,9 @@
   },
   "episode": {
     "topbar": {
+      "unavailable": "分集不存在或已被删除",
+      "loadFailed": "加载分集失败",
+      "retryLoad": "重试",
       "back": "返回项目",
       "episodeN": "第 {n} 集",
       "meta": "{roles} 角色 · {shots} 段落",
@@ -907,7 +1060,7 @@
     "index": {
       "welcome": {
         "title": "👋 欢迎使用 MuseReel",
-        "desc": "小说 → 剧本 → 资产 → 分镜 → 视频 → 成片，一站式 AI 短剧制作。先配置 AI 服务，再创建第一个项目。"
+        "desc": "剧本 → 资产 → 分镜 → 视频 → 成片。先配置 AI 服务，再创建第一个项目。"
       },
       "create": {
         "title": "第 2 步 · 新建项目",

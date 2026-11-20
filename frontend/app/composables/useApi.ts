@@ -1,11 +1,17 @@
 const BASE = '/api/v1'
 
-async function req<T = any>(method: string, path: string, body?: any): Promise<T> {
+class ApiError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message)
+  }
+}
+
+async function req<T = any>(method: string, path: string, body?: any, logBody = true): Promise<T> {
   const opts: RequestInit = { method, headers: { 'Content-Type': 'application/json' } }
   if (body) opts.body = JSON.stringify(body)
 
   const start = performance.now()
-  console.log(`%c[API] %c${method} %c${path}`, 'color:#888', 'color:#4fc3f7;font-weight:bold', 'color:#ccc', body || '')
+  console.log(`%c[API] %c${method} %c${path}`, 'color:#888', 'color:#4fc3f7;font-weight:bold', 'color:#ccc', logBody && body ? body : '')
 
   try {
     const resp = await fetch(`${BASE}${path}`, opts)
@@ -14,7 +20,7 @@ async function req<T = any>(method: string, path: string, body?: any): Promise<T
 
     if (!resp.ok || (json.code && json.code >= 400)) {
       console.log(`%c[API] %c${method} ${path} %c${resp.status} %c${ms}ms`, 'color:#888', 'color:#ef5350', 'color:#ef5350;font-weight:bold', 'color:#888', json.message || '')
-      throw new Error(json.message || `${resp.status}`)
+      throw new ApiError(json.message || `${resp.status}`, resp.ok ? json.code : resp.status)
     }
 
     console.log(`%c[API] %c${method} ${path} %c${resp.status} %c${ms}ms`, 'color:#888', 'color:#66bb6a', 'color:#66bb6a;font-weight:bold', 'color:#888')
@@ -36,11 +42,51 @@ export const api = {
 }
 
 export const dramaAPI = {
-  list: () => api.get<{ items: any[] }>('/dramas'),
-  get: (id: number) => api.get(`/dramas/${id}`),
-  create: (data: any) => api.post('/dramas', data),
+  list: () => api.get<{ items: any[] }>('/dramas?episode_summary=1'),
+  get: (id: number) => api.get(`/dramas/${id}?episode_summary=1`),
+  getEpisode: (id: number, number: number, expectedId?: string) => api.get(
+    `/dramas/${id}/episodes/${number}${expectedId === undefined ? '' : `?episode_id=${encodeURIComponent(expectedId)}`}`,
+  ),
+  create: (data: any) => req('POST', '/dramas', data, !data.script_creation),
   update: (id: number, data: any) => api.put(`/dramas/${id}`, data),
   del: (id: number) => api.del(`/dramas/${id}`),
+}
+
+export const projectScriptAPI = {
+  inspect: (source_text: string) => req('POST', '/dramas/script-import-preview', { source_text }, false),
+  get: (dramaId: number) => api.get(`/dramas/${dramaId}/script`),
+  source: (dramaId: number) => api.get(`/dramas/${dramaId}/script/source`),
+  novel: (dramaId: number, jobId: number) => api.get(`/dramas/${dramaId}/script/novels/${jobId}`),
+  outline: (dramaId: number, data: object) => req('PUT', `/dramas/${dramaId}/script/outline`, data, false),
+  episode: (dramaId: number, id: number) => api.get(`/dramas/${dramaId}/script/episodes/${id}`),
+  saveEpisode: (dramaId: number, id: number, data: object) => req('PUT', `/dramas/${dramaId}/script/episodes/${id}`, data, false),
+  produce: (dramaId: number, id: number) => api.post(`/dramas/${dramaId}/script/episodes/${id}/production`),
+  start: (dramaId: number, data: object) => req('POST', `/dramas/${dramaId}/script/jobs`, data, false),
+  preview: (dramaId: number, id: number, ordinal: number) => api.get(`/dramas/${dramaId}/script/jobs/${id}/preview/${ordinal}`),
+  retry: (dramaId: number, id: number, data: object) => api.post(`/dramas/${dramaId}/script/jobs/${id}/retry`, data),
+  resolve: (dramaId: number, id: number, apply: boolean) => api.post(`/dramas/${dramaId}/script/jobs/${id}/resolve`, { apply }),
+}
+
+export const novelAPI = {
+  list: (dramaId: number) => api.get(`/dramas/${dramaId}/novel-jobs`),
+  create: (dramaId: number, data: {
+    request_id: string
+    workflow_mode: 'preview_first'
+    content_language?: string
+  } & ({ source_type: 'ai'; brief: string; target_length: number; config_id: number; model: string }
+    | { source_type: 'import'; source_text: string })) => req('POST', `/dramas/${dramaId}/novel-jobs`, data, false),
+  split: (dramaId: number, id: number, data: { episode_count: number; config_id: number; model: string }) =>
+    api.post(`/dramas/${dramaId}/novel-jobs/${id}/split`, data),
+  get: (dramaId: number, id: number) => api.get(`/dramas/${dramaId}/novel-jobs/${id}`),
+  chapter: (dramaId: number, id: number, number: number) =>
+    api.get(`/dramas/${dramaId}/novel-jobs/${id}/chapters/${number}`),
+  manuscript: (dramaId: number, id: number, version: 'draft' | 'optimized', part: number) =>
+    api.get(`/dramas/${dramaId}/novel-jobs/${id}/manuscripts/${version}/${part}`),
+  retry: (dramaId: number, id: number, data: {
+    config_id?: number
+    model?: string
+    target_length?: number
+  }) => api.post(`/dramas/${dramaId}/novel-jobs/${id}/retry`, data),
 }
 
 export const episodeAPI = {

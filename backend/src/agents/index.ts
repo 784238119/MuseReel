@@ -8,7 +8,7 @@ import { Agent } from '@mastra/core/agent'
 import type { RequestContext } from '@mastra/core/request-context'
 import { createGoogleGenerativeAI } from '@ai-sdk/google'
 import { createOpenAI } from '@ai-sdk/openai'
-import { getTextConfig, getTextProviderBaseUrl, getConfigById } from '../services/ai.js'
+import { getTextConfig, getTextProviderBaseUrl, getConfigById, type AIConfig } from '../services/ai.js'
 import { logTaskProgress } from '../utils/task-logger.js'
 import { scriptTools } from './tools/script-tools.js'
 import { extractTools } from './tools/extract-tools.js'
@@ -296,6 +296,10 @@ async function getModel(fileModel: string | undefined, modelOverride?: string, t
   // 请求可指定文本配置（含其 provider/baseUrl/apiKey），否则回退到当前启用配置
   const textConfig = (textConfigId ? await getConfigById(textConfigId) : null) || await getTextConfig()
   const modelName = modelOverride || fileModel || textConfig.model
+  return createTextModel(textConfig, modelName)
+}
+
+export function createTextModel(textConfig: AIConfig, modelName: string) {
   const providerName = textConfig.provider.toLowerCase()
   const resolvedBaseURL = getTextProviderBaseUrl(textConfig)
   const temperature = textConfig.temperature ?? null

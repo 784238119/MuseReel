@@ -1,8 +1,8 @@
 <template>
-  <div class="studio" v-if="drama">
+  <div class="studio" v-if="drama && episode">
     <header class="studio-topbar">
       <div class="studio-topbar-main">
-        <button class="back-btn topbar-back" @click="navigateTo(`/drama/${dramaId}`)">
+        <button class="back-btn topbar-back" @click="navigateTo({ path: `/drama/${dramaId}`, query: { tab: route.query.from === 'script' ? 'script' : 'episodes' } })">
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round" stroke-linejoin="round">
             <line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>
           </svg>
@@ -1445,6 +1445,15 @@
     </main>
     </div>
   </div>
+  <section v-else-if="episodeLoadError" class="card episode-load-error">
+    <h1 role="alert">{{ t(`episode.topbar.${episodeLoadError}`) }}</h1>
+    <div class="episode-load-actions">
+      <NuxtLink class="btn" :to="`/drama/${dramaId}`">{{ t('episode.topbar.back') }}</NuxtLink>
+      <button v-if="episodeLoadError !== 'unavailable'" type="button" class="btn btn-primary" @click="loadWorkbench">
+        {{ t('episode.topbar.retryLoad') }}
+      </button>
+    </div>
+  </section>
 </template>
 
 <script setup>
@@ -1457,7 +1466,7 @@ import {
 import { api, dramaAPI, episodeAPI, storyboardAPI, characterAPI, sceneAPI, propAPI, taskAPI, mergeAPI, aiConfigAPI, uploadAPI } from '~/composables/useApi'
 import { startTour, autoTour } from '~/composables/useTour'
 import { useAgent } from '~/composables/useAgent'
-import { resolveTextModelSelection } from '~/utils/text-model-selection'
+import { collectModelOptions, configModels, resolveTextModelSelection } from '~/utils/text-model-selection'
 import { toastError, mapError, MODERATION_RE } from '~/composables/useToast'
 import LocaleSwitcher from '~/components/LocaleSwitcher.vue'
 
@@ -1470,6 +1479,7 @@ const dramaId = Number(route.params.id)
 const episodeNumber = Number(route.params.episodeNumber)
 
 const drama = ref(null), episode = ref(null), chars = ref([]), scenes = ref([]), propItems = ref([]), sbs = ref([]), mergeData = ref(null)
+const episodeLoadError = ref('')
 // 工作台面板位置记忆（按剧集隔离）：仅页面刷新(reload)时恢复到上次所在步骤；
 // 从列表/详情页点击进入时始终默认「剧本」面板
 const PANEL_STORE_KEY = `huobao:workbench:panel:${dramaId}:${episodeNumber}`
@@ -2154,29 +2164,6 @@ async function changeEpisodeResolution(val) {
 // 画面比例在创建项目时固定，视频生成统一使用
 const dramaAspectRatio = computed(() => drama.value?.aspect_ratio || drama.value?.aspectRatio || '16:9')
 
-// 生成可选模型列表：配置中的模型数组（首位为配置默认）；API 可能返回数组或 JSON 字符串
-function configModels(cfg) {
-  const raw = cfg?.model
-  if (!raw) return []
-  if (Array.isArray(raw)) return raw.filter(Boolean)
-  try { const m = JSON.parse(raw); return Array.isArray(m) ? m.filter(Boolean) : [m].filter(Boolean) } catch { return [raw].filter(Boolean) }
-}
-// 汇总该类型全部启用配置的模型（按 厂商+模型 去重，按优先级排序），选中模型时连同所属配置一起调用
-// 选中值使用 'provider/model' 复合键：同名模型可能来自不同厂商（如中转站与官方），必须区分
-function collectModelOptions(cfgs) {
-  const seen = new Set()
-  const out = []
-  const sorted = [...cfgs].filter(c => c.is_active).sort((a, b) => (b.priority || 0) - (a.priority || 0))
-  for (const c of sorted) {
-    for (const m of configModels(c)) {
-      const key = `${c.provider}/${m}`
-      if (seen.has(key)) continue
-      seen.add(key)
-      out.push({ key, model: m, provider: c.provider, configId: c.id, configName: c.name || c.provider })
-    }
-  }
-  return out
-}
 // 复合键 → 裸模型名（后端适配器按厂商校验模型名，不能带 provider 前缀）
 function bareModelName(key) {
   if (!key) return ''
@@ -2693,33 +2680,51 @@ function sceneShotCount(sceneId) {
 watch(rawContent, v => { localRaw.value = v }, { immediate: true })
 watch(scriptContent, v => { localScript.value = v }, { immediate: true })
 
+let entryStagePending = route.query.start === 'assets'
 async function refresh() {
+  episodeLoadError.value = ''
   try {
-    drama.value = await dramaAPI.get(dramaId)
-    const ep = drama.value.episodes?.find(e => (e.episode_number || e.episodeNumber) === episodeNumber)
-    if (ep) {
-      episode.value = ep
-      try { chars.value = await episodeAPI.characters(ep.id) } catch { chars.value = [] }
-      try { scenes.value = await episodeAPI.scenes(ep.id) } catch { scenes.value = [] }
-      try { propItems.value = await episodeAPI.props(ep.id) } catch { propItems.value = [] }
-      sbs.value = await episodeAPI.storyboards(ep.id)
-      selectedVideoSbIds.value = selectedVideoSbIds.value.filter(id => sbs.value.some(sb => sb.id === id))
-      if (sbs.value.length) {
-        const currentSelectedId = selectedSb.value?.id
-        selectedSb.value = sbs.value.find(sb => sb.id === currentSelectedId) || sbs.value[0]
-      } else {
-        selectedSb.value = null
-      }
-
-      const epHasContent = !!(episode.value?.content)
-      const epHasScript = !!(episode.value?.script_content || episode.value?.scriptContent)
-
-      if (panelRestored) {
-        // 已恢复到上次所在步骤，跳过自动重置（仅首次加载生效）
-        panelRestored = false
-      } else if (epHasScript || epHasContent) scriptStep.value = 1
-      else scriptStep.value = 0
+    const [project, ep] = await Promise.all([
+      dramaAPI.get(dramaId),
+      dramaAPI.getEpisode(dramaId, episodeNumber, route.query.episode_id),
+    ])
+    drama.value = project
+    episode.value = ep
+  } catch (error) {
+    if (error.status === 404 || !episode.value) {
+      episode.value = null
+      episodeLoadError.value = error.status === 404 ? 'unavailable' : 'loadFailed'
+    } else {
+      toastError(error)
     }
+    return
+  }
+  const ep = episode.value
+  try {
+    try { chars.value = await episodeAPI.characters(ep.id) } catch { chars.value = [] }
+    try { scenes.value = await episodeAPI.scenes(ep.id) } catch { scenes.value = [] }
+    try { propItems.value = await episodeAPI.props(ep.id) } catch { propItems.value = [] }
+    sbs.value = await episodeAPI.storyboards(ep.id)
+    selectedVideoSbIds.value = selectedVideoSbIds.value.filter(id => sbs.value.some(sb => sb.id === id))
+    if (sbs.value.length) {
+      const currentSelectedId = selectedSb.value?.id
+      selectedSb.value = sbs.value.find(sb => sb.id === currentSelectedId) || sbs.value[0]
+    } else {
+      selectedSb.value = null
+    }
+
+    const epHasContent = !!(episode.value?.content)
+    const epHasScript = !!(episode.value?.script_content || episode.value?.scriptContent)
+
+    if (entryStagePending && epHasScript) {
+      entryStagePending = false
+      panelRestored = false
+      if (panel.value === 'script') goMainStage('assets')
+    } else if (panelRestored) {
+      // 已恢复到上次所在步骤，跳过自动重置（仅首次加载生效）
+      panelRestored = false
+    } else if (epHasScript || epHasContent) scriptStep.value = 1
+    else scriptStep.value = 0
   } catch (e) {
     toastError(e)
   }
@@ -3476,7 +3481,14 @@ async function loadConfigs() {
   } catch (e) { console.error('Failed to load AI configs', e) }
 }
 
-onMounted(async () => { await refresh(); loadConfigs(); syncExtractStatus() })
+async function loadWorkbench() {
+  await refresh()
+  if (episode.value) {
+    loadConfigs()
+    syncExtractStatus()
+  }
+}
+onMounted(loadWorkbench)
 
 // ===== 应用内引导（工作台）：沿左侧进度栏走 6 步流水线 =====
 const EPISODE_TOUR = [
@@ -3486,10 +3498,15 @@ const EPISODE_TOUR = [
   { element: '.pipe-section:nth-of-type(2) .pipe-item:last-child', titleKey: 'tour.episode.videos.title', descKey: 'tour.episode.videos.desc', popoverSide: 'right' },
   { element: '.studio-actions .tour-help-btn', titleKey: 'tour.episode.help.title', descKey: 'tour.episode.help.desc', popoverSide: 'bottom', popoverAlign: 'end' },
 ]
-onMounted(() => setTimeout(() => autoTour('episode', EPISODE_TOUR, t), 900))
+onMounted(() => setTimeout(() => {
+  if (episode.value) autoTour('episode', EPISODE_TOUR, t)
+}, 900))
 </script>
 
 <style scoped>
+.episode-load-error { max-width: 460px; margin: 48px auto; padding: 24px; }
+.episode-load-error h1 { margin: 0 0 16px; font-size: 18px; }
+.episode-load-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .voice-reference-hint {
   margin: 8px 0 0;
   font-size: 11px;

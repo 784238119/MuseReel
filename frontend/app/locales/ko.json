@@ -1,4 +1,154 @@
 {
+  "projectScript": {
+    "title": "대본",
+    "video": "영상 제작",
+    "directory": "대본 목록",
+    "outline": "줄거리",
+    "episode": "제 {n}화",
+    "previewEpisode": "이번 제 {n}화 · 미리보기",
+    "review": "수정안 미리보기",
+    "originalUpload": "업로드 원본",
+    "add": "회차 추가",
+    "continueAI": "이어서 쓰기",
+    "historyNovel": "이전 소설",
+    "useNovel": "원고 불러오기",
+    "rewrite": "AI로 다시 쓰기",
+    "rewriteIdea": "이번 회차의 변경 사항을 입력하세요",
+    "continueIdea": "후속 이야기 방향 (선택)",
+    "generate": "생성",
+    "edit": "편집",
+    "produce": "제작 시작",
+    "before": "현재 대본",
+    "after": "수정안",
+    "apply": "수정 적용",
+    "discard": "수정안 취소",
+    "episodeTitle": "회차 제목",
+    "episodeScript": "회차 대본",
+    "emptyEpisode": "이 회차에 대본이 없습니다.",
+    "emptyOutline": "줄거리를 편집하거나 회차를 추가할 때 이야기를 입력하세요.",
+    "loading": "불러오는 중…",
+    "sourceText": "대본 본문",
+    "sourcePlaceholder": "회차가 표시된 대본이나 연속 본문을 붙여넣으세요",
+    "file": "TXT 또는 Markdown 파일 선택",
+    "inspecting": "회차 확인 중…",
+    "detected": "{count}개 회차를 찾았습니다. 원래 구분을 유지합니다.",
+    "untitled": "제목 없음",
+    "invalidAt": "{line}행의 회차 번호가 중복되거나 순서가 맞지 않거나 본문이 비어 있습니다.",
+    "asContinuous": "연속 본문으로 처리",
+    "count": "목표 회차 수",
+    "duration": "회차별 목표 시간",
+    "idea": "이야기 아이디어",
+    "ideaPlaceholder": "장르, 주인공, 중심 갈등을 설명하세요",
+    "createAI": "만들고 생성",
+    "createUpload": "업로드하고 만들기",
+    "submitting": "만드는 중…",
+    "modes": {
+      "upload": "대본 업로드",
+      "ai": "대본 생성"
+    },
+    "outlineFields": {
+      "synopsis": "이야기 소개",
+      "characters": "등장인물",
+      "arc": "이야기 전개"
+    },
+    "durations": {
+      "30–60s": "30–60초",
+      "1–2m": "1–2분",
+      "2–3m": "2–3분"
+    },
+    "stages": {
+      "outline": "줄거리 준비 중",
+      "writing": "회차 대본 준비 중",
+      "publishing": "회차 저장 중"
+    },
+    "errors": {
+      "production_locked": "제작이 시작되었습니다. 여기서는 대본을 읽을 수만 있습니다.",
+      "script_conflict": "대본이 변경되었습니다. 새로고침한 뒤 다시 시도하세요.",
+      "outline_required": "줄거리를 저장하거나 후속 이야기 방향을 입력하세요.",
+      "pending_review": "먼저 현재 수정안을 적용하거나 취소하세요.",
+      "invalid_script": "「## S01 | 실내 · 역 | 아침」과 같은 장면 제목을 사용하세요.",
+      "invalid_episode_headings": "회차 제목과 본문을 확인하거나 연속 본문으로 처리하세요."
+    }
+  },
+  "novel": {
+    "title": "소설 작성",
+    "brief": "창작 설정",
+    "briefPlaceholder": "배경, 주인공, 주요 갈등과 원하는 결말을 입력하세요.",
+    "episodeCount": "목표 회차 수",
+    "targetLength": "회차당 목표 글자 수",
+    "model": "텍스트 모델",
+    "appendHint": "원고를 다듬은 뒤 지정한 회차로 나누어 프로젝트에 추가합니다.",
+    "history": "작성 기록",
+    "progress": "{done}/{total}장 완료",
+    "retry": "이어서 생성",
+    "keepModel": "{model} 계속 사용",
+    "chapters": "장 목록",
+    "openEpisode": "{n}화 열기",
+    "reloadChapter": "장 다시 불러오기",
+    "reloadModels": "모델 다시 불러오기",
+    "states": {
+      "planning": "구성 중",
+      "writing": "작성 중",
+      "publishing": "회차 생성 중",
+      "completed": "소설 및 회차 생성 완료",
+      "failed": "생성 일시 중지",
+      "interrupted": "생성 중단",
+      "analyzing": "원고를 검토하는 중",
+      "optimizing": "원고를 다듬는 중",
+      "splitting": "회차를 나누는 중",
+      "ready": "원고를 저장했습니다. 미리 보고 회차를 나눌 수 있습니다."
+    },
+    "errors": {
+      "models_load_failed": "텍스트 모델 목록을 불러오지 못했습니다.",
+      "model_unavailable": "설정에서 선택한 텍스트 모델을 구성하고 활성화하세요.",
+      "image_unavailable": "이미지 생성 설정을 활성화하세요.",
+      "video_unavailable": "동영상 생성 설정을 활성화하세요.",
+      "job_running": "이 프로젝트에서 소설을 생성 중입니다.",
+      "invalid_request": "설정, 회차 수, 분량, 모델을 확인하세요.",
+      "invalid_output": "모델 출력 형식이 잘못되었습니다. 저장한 부분부터 이어서 생성할 수 있습니다.",
+      "truncated": "모델 출력이 잘렸습니다. 저장한 부분부터 이어서 생성할 수 있습니다.",
+      "generation_failed": "모델 요청에 실패했습니다. 설정을 확인한 후 다시 시도하세요.",
+      "timeout": "모델 요청 시간이 초과되었습니다. 저장한 부분부터 이어서 생성할 수 있습니다.",
+      "publish_failed": "회차 생성에 실패했습니다. 본문은 저장되어 있으며 다시 시도할 수 있습니다.",
+      "project_unavailable": "프로젝트를 사용할 수 없습니다.",
+      "interrupted": "서비스가 재시작되었습니다. 저장한 부분부터 이어서 생성할 수 있습니다.",
+      "load_failed": "불러오지 못했습니다. 잠시 후 다시 시도하세요.",
+      "source_too_large": "가져올 본문은 5 MiB 이하여야 합니다.",
+      "invalid_file": "본문이 있는 UTF-8 TXT 또는 Markdown 파일을 선택하세요.",
+      "manuscript_too_short": "원고가 짧아 지정한 회차로 나눌 수 없습니다. 회차를 줄여 다시 시도하세요.",
+      "draft_not_ready": "원고를 준비 중입니다."
+    },
+    "sources": {
+      "ai": "AI로 집필",
+      "import": "소설 가져오기"
+    },
+    "sourceText": "소설 본문",
+    "sourcePlaceholder": "본문을 붙여넣거나 파일을 선택하세요.",
+    "file": "파일 선택 (UTF-8 TXT / Markdown, 최대 5 MiB)",
+    "manuscripts": "원고 버전",
+    "versions": {
+      "draft": "원고",
+      "optimized": "편집본",
+      "episodes": "회차"
+    },
+    "previous": "이전",
+    "next": "다음",
+    "part": "{part} / {total} 부분",
+    "loading": "본문을 불러오는 중…",
+    "partProgress": "{done}/{total} 부분 완료",
+    "episodeProgress": "{done}/{total} 회차 완료",
+    "splitAgent": "소설 회차 나누기",
+    "prepare": "소설 준비",
+    "generateDraft": "소설 생성",
+    "saveDraft": "저장 후 미리보기",
+    "preview": "소설 미리보기",
+    "newNovel": "새 소설",
+    "totalLength": "목표 전체 분량",
+    "splitNow": "회차 나누기",
+    "viewEpisodes": "회차 보기",
+    "published": "{count}화 생성 완료 · 제 {range}화",
+    "reload": "다시 불러오기"
+  },
   "app": {
     "title": "MuseReel",
     "updateAvailable": "새 버전 v{version}을 사용할 수 있습니다. 「설정 → 업데이트 정보」에서 업그레이드하세요"
@@ -152,7 +302,7 @@
     },
     "createDialog": {
       "title": "새 프로젝트",
-      "desc": "생성 후 프로젝트 페이지에서 화를 선택합니다",
+      "desc": "프로젝트를 만든 후 AI로 소설을 쓰거나 기존 소설을 가져올 수 있습니다",
       "name": "프로젝트 이름",
       "namePlaceholder": "예: 도시 로맨스 드라마 『타임 우체국』",
       "style": "비주얼 스타일",
@@ -457,6 +607,9 @@
   },
   "episode": {
     "topbar": {
+      "unavailable": "회차가 없거나 삭제되었습니다",
+      "loadFailed": "회차를 불러오지 못했습니다",
+      "retryLoad": "다시 시도",
       "back": "프로젝트로 돌아가기",
       "episodeN": "제 {n}화",
       "meta": "캐릭터 {roles} · 세그먼트 {shots}",
@@ -907,7 +1060,7 @@
     "index": {
       "welcome": {
         "title": "👋 MuseReel에 오신 것을 환영합니다",
-        "desc": "소설 → 대본 → 에셋 → 스토리보드 → 영상 → 완성, 모두 한곳에서. 먼저 AI 서비스를 설정하고 첫 프로젝트를 만들어 보세요."
+        "desc": "대본 → 에셋 → 스토리보드 → 영상 → 완성. 먼저 AI 서비스를 설정하고 첫 프로젝트를 만들어 보세요."
       },
       "create": {
         "title": "2단계 · 프로젝트 생성",

@@ -180,6 +180,7 @@ test('project creative chat streams real reads and writes, resumes context and r
   assert.equal(planned.events.at(-1).payload.status, 'completed')
   assert.deepEqual((await request(`/dramas/${project}/script`)).data.outline, outline)
   const multi = await run(3, multiRequest)
+  assert.ok(multi.events.every(event => typeof event.created_at === 'string'))
   assert.deepEqual(multi.events.filter(event => event.kind === 'tool_started').map(event => event.payload.tool),
     ['read_episode_script', 'read_episode_script', 'edit_episode_scene', 'create_episode_script'])
   const saved = multi.events.filter(event => event.payload.change)
@@ -212,6 +213,9 @@ test('project creative chat streams real reads and writes, resumes context and r
   const history = await request(`${root}/sessions/${sessionId}/turns`)
   assert.equal(history.data.turns.length, 9)
   assert.equal(history.data.events.filter((event: { payload: { change?: object } }) => event.payload.change).length, 5)
+  const listedSessions = (await request(`${root}/sessions`)).data.sessions
+  assert.equal(listedSessions[0].last_status, 'stopped')
+  assert.equal(listedSessions[0].last_model, 'creative-test')
   const novelRun = await run(11, '新建小说并保存第一章。')
   assert.equal(novelRun.events.at(-1).payload.status, 'completed')
   assert.deepEqual(novelRun.events.filter(event => event.kind === 'tool_started').map(event => event.payload.tool),
@@ -224,4 +228,5 @@ test('project creative chat streams real reads and writes, resumes context and r
   assert.match(novel.storyPlan!, /港口证词/)
   assert.match(db.select().from(schema.novelManuscriptParts)
     .where(eq(schema.novelManuscriptParts.jobId, novelId)).get()!.draft, /港口董事会/)
+  assert.equal((await request(`${root}/sessions`)).data.sessions[0].last_status, 'completed')
 })

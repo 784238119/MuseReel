@@ -30,7 +30,7 @@ let backendBundle = BACKEND_BUNDLE
 let runtimeResourcesDir = ''
 
 /** workspace 模板版本：内置模板更新时递增，触发向用户目录补缺失文件 */
-const TEMPLATE_VERSION = '4'
+const TEMPLATE_VERSION = '5'
 const STORAGE_CONFIG_FILE = 'storage-config.json'
 
 let mainWindow: BrowserWindow | null = null
@@ -167,7 +167,18 @@ export function normCase(p: string): string {
  */
 function syncWorkspaceTemplate(templateDir: string, destDir: string) {
   const marker = path.join(destDir, '.template-version')
-  if (fs.existsSync(marker) && fs.readFileSync(marker, 'utf8').trim() === TEMPLATE_VERSION) return
+  const installedVersion = fs.existsSync(marker) ? fs.readFileSync(marker, 'utf8').trim() : ''
+  if (installedVersion === TEMPLATE_VERSION) return
+  if (installedVersion === '4') {
+    // 版本 5 只新增小说技能，保留已有的提示词和技能。
+    for (const skill of ['novel-writer', 'novel-splitter']) {
+      fs.cpSync(path.join(templateDir, 'skills', skill), path.join(destDir, 'skills', skill), {
+        recursive: true, force: false, errorOnExist: false,
+      })
+    }
+    fs.writeFileSync(marker, TEMPLATE_VERSION)
+    return
+  }
   fs.cpSync(templateDir, destDir, { recursive: true, force: false, errorOnExist: false })
   fs.cpSync(path.join(templateDir, 'prompts'), path.join(destDir, 'prompts'), { recursive: true, force: true })
   fs.writeFileSync(marker, TEMPLATE_VERSION)

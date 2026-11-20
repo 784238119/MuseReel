@@ -306,7 +306,7 @@
               <span class="agent-type-badge skills-head-badge">{{ selectedAgentIcon }}</span>
               <div class="skills-head-copy">
                 <h2 class="settings-title">{{ selectedAgentLabel }}</h2>
-                <div class="dim" style="font-size:12px;margin-top:2px;display:flex;align-items:center;gap:6px">
+                <div class="dim" style="font-size:12px;margin-top:2px;display:flex;flex-wrap:wrap;align-items:center;gap:6px">
                   {{ selectedAgentType }}
                   <span v-if="getAgentCfg(selectedAgent) && !getAgentCfg(selectedAgent).is_default" class="tag tag-success">{{ t('settings.common.custom') }}</span>
                   <span v-else class="tag">{{ t('common.default') }}</span>
@@ -335,14 +335,16 @@
                   <span class="field-label">System Prompt <span class="dim">({{ t('settings.agents.promptHint', { file: promptFileName }) }})</span>
                     <span v-if="agentPromptFallback" class="tag agent-fallback-tag">{{ t('settings.agents.langFallback') }}</span>
                   </span>
-                  <textarea v-model="agentForm.system_prompt" class="textarea agent-prompt-input" rows="16" :placeholder="t('settings.agents.promptPlaceholder')" />
+                  <textarea v-model="agentForm.system_prompt" class="textarea agent-prompt-input" rows="16"
+                    :disabled="!agentPromptReady || agentSaving" :placeholder="t('settings.agents.promptPlaceholder')" />
                 </label>
                 <div class="agent-card-foot">
-                  <button class="btn btn-ghost btn-sm" @click="resetAgentPrompt(selectedAgent)">{{ t('settings.agents.reset') }}</button>
+                  <button class="btn btn-ghost btn-sm" :disabled="!agentPromptReady || agentSaving"
+                    @click="resetAgentPrompt(selectedAgent)">{{ t('settings.agents.reset') }}</button>
                   <span v-if="agentSaved === selectedAgent" class="tag tag-success" style="margin-left:8px">
                     <Check :size="10" /> {{ t('common.saved') }}
                   </span>
-                  <button class="btn btn-primary btn-sm ml-auto" :disabled="agentSaving" @click="saveAgentCfg(selectedAgent)">
+                  <button class="btn btn-primary btn-sm ml-auto" :disabled="!agentPromptReady || agentSaving" @click="saveAgentCfg(selectedAgent)">
                     <Loader2 v-if="agentSaving" :size="12" class="animate-spin" />
                     {{ t('common.save') }}
                   </button>
@@ -829,12 +831,16 @@ const agentPane = ref('prompt')   // 右侧子 tab：prompt | skills
 const agentSaving = ref(false)
 const agentSaved = ref(null)
 const agentForm = reactive({ system_prompt: '' })
+const loadedPrompt = ref(null)
+let agentPromptRequest = 0
 
 const agentDefs = computed(() => [
   { type: 'script_rewriter', label: t('settings.agents.scriptRewriter'), icon: '📝' },
   { type: 'extractor', label: t('settings.agents.extractor'), icon: '🔍' },
   { type: 'storyboard_breaker', label: t('settings.agents.storyboardBreaker'), icon: '🎬' },
   { type: 'prompt_generator', label: t('settings.agents.promptGenerator'), icon: '🖼' },
+  { type: 'novel_writer', label: t('novel.title'), icon: '📖' },
+  { type: 'novel_splitter', label: t('novel.splitAgent'), icon: '📑' },
 ])
 
 function getAgentCfg(type) {
@@ -848,38 +854,51 @@ async function loadAgents() {
 }
 
 async function loadAgentPrompt(type) {
+  const request = ++agentPromptRequest
+  const lang = editLang.value
+  loadedPrompt.value = null
+  agentForm.system_prompt = ''
+  agentPromptFallback.value = false
+  agentSaved.value = null
   try {
-    const cfg = await promptAPI.get(type, editLang.value)
-    if (selectedAgent.value === type) {
+    const cfg = await promptAPI.get(type, lang)
+    if (request === agentPromptRequest && selectedAgent.value === type && editLang.value === lang) {
       agentForm.system_prompt = cfg.system_prompt || ''
-      agentPromptFallback.value = editLang.value !== 'zh' && !!cfg.is_default
+      agentPromptFallback.value = lang !== 'zh' && !!cfg.is_default
+      loadedPrompt.value = { type, lang }
     }
-    agentSaved.value = null
   } catch (e) { toastError(e) }
 }
 
 async function resetAgentPrompt(type) {
+  const lang = editLang.value
+  agentSaving.value = true
   try {
-    await promptAPI.reset(type, editLang.value)
+    await promptAPI.reset(type, lang)
     await loadAgents()
-    const cfg = await promptAPI.get(type, editLang.value)
-    agentForm.system_prompt = cfg.system_prompt || ''
-    agentPromptFallback.value = editLang.value !== 'zh' && !!cfg.is_default
+    if (selectedAgent.value === type && editLang.value === lang) await loadAgentPrompt(type)
     toast.success(t('settings.agents.promptReset'))
-  } catch (e) { toastError(e) }
+  } catch (e) {
+    toastError(e)
+  } finally {
+    agentSaving.value = false
+  }
 }
 
 async function saveAgentCfg(type) {
+  const lang = editLang.value
   agentSaving.value = true
   agentSaved.value = null
   try {
     await promptAPI.update(type, {
       name: agentDefs.value.find(a => a.type === type)?.label || type,
       system_prompt: agentForm.system_prompt,
-    }, editLang.value)
+    }, lang)
     await loadAgents()
-    agentPromptFallback.value = false
-    agentSaved.value = type
+    if (selectedAgent.value === type && editLang.value === lang) {
+      agentPromptFallback.value = false
+      agentSaved.value = type
+    }
     toast.success(t('settings.agents.saved', { agent: agentDefs.value.find(a => a.type === type)?.label }))
     setTimeout(() => { if (agentSaved.value === type) agentSaved.value = null }, 3000)
   } catch (e) {
@@ -919,6 +938,8 @@ const skillFileName = computed(() => `SKILL${editLang.value !== 'zh' ? `.${editL
 
 // Agent 编辑语言 = 全局内容语言的只读镜像（改语言请到「通用」页）
 const editLang = computed(() => contentLanguage.value)
+const agentPromptReady = computed(() => loadedPrompt.value?.type === selectedAgent.value
+  && loadedPrompt.value?.lang === editLang.value)
 const contentLangLabel = computed(() =>
   contentLangOptions.find(l => l.value === contentLanguage.value)?.label || contentLanguage.value)
 
@@ -1462,7 +1483,7 @@ onBeforeUnmount(stopUsagePoll)
 
 /* Agent 右侧子 tab（System Prompt / Skills）：作为卡片头，与卡片同宽，不再单独悬浮 */
 .agent-pane-tabs {
-  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px;
   padding: 10px 16px;
   border-bottom: 1px solid var(--border);
 }
@@ -1549,7 +1570,7 @@ onBeforeUnmount(stopUsagePoll)
 .skill-card-head { display: flex; align-items: center; gap: 10px; padding: 12px 16px; cursor: pointer; transition: background 0.15s; }
 .skill-card-head:hover { background: var(--bg-hover); }
 .skill-card-body { padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 10px; border-top: 1px solid var(--border); }
-.skill-card-foot { display: flex; align-items: center; gap: 8px; }
+.skill-card-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 
 /* Shared */
 .field { display: flex; flex-direction: column; gap: 5px; }

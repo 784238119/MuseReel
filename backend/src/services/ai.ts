@@ -18,6 +18,15 @@ export interface AIConfig {
   temperature?: number | null
 }
 
+export function parseConfigModels(raw: string | null): string[] {
+  if (!raw) return []
+  let value: unknown
+  try { value = JSON.parse(raw) } catch { value = raw }
+  const entries = Array.isArray(value) ? value : [value]
+  return entries.filter((entry): entry is string => typeof entry === 'string' && entry.trim().length > 0)
+    .map(entry => entry.trim())
+}
+
 /** 从 settings JSON 解析 temperature；非法值一律视为未设置 */
 export function parseConfigTemperature(settingsRaw: string | null | undefined): number | null {
   if (!settingsRaw) return null
@@ -75,7 +84,7 @@ export async function getActiveConfig(serviceType: ServiceType): Promise<AIConfi
     return null
   }
 
-  const models = active.model ? JSON.parse(active.model) : []
+  const models = parseConfigModels(active.model)
   const logKey = `${active.id}:${models[0] || ''}`
   if (lastLoggedActiveConfigKey.get(serviceType) !== logKey) {
     lastLoggedActiveConfigKey.set(serviceType, logKey)
@@ -115,9 +124,9 @@ export async function getActiveConfigId(serviceType: ServiceType): Promise<numbe
   return rows[0]?.id ?? null
 }
 
-export async function getConfigById(id: number): Promise<AIConfig | null> {
-  const [row] = await db.select().from(schema.aiServiceConfigs)
-    .where(eq(schema.aiServiceConfigs.id, id))
+export function getConfigById(id: number): AIConfig | null {
+  const row = db.select().from(schema.aiServiceConfigs)
+    .where(eq(schema.aiServiceConfigs.id, id)).get()
   if (!row || !row.isActive) {
     logTaskWarn('AIConfig', 'config-by-id-missing', { configId: id })
     return null
@@ -130,7 +139,7 @@ export async function getConfigById(id: number): Promise<AIConfig | null> {
     })
     return null
   }
-  const models = row.model ? JSON.parse(row.model) : []
+  const models = parseConfigModels(row.model)
   const logKey = `${row.provider}:${models[0] || ''}:${row.serviceType}`
   if (lastLoggedConfigByIdKey.get(id) !== logKey) {
     lastLoggedConfigByIdKey.set(id, logKey)

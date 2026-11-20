@@ -25,7 +25,7 @@
           </span>
         </div>
       </div>
-      <button class="btn btn-primary head-action" @click="openAddEpisode">
+      <button v-if="activeTab === 'episodes'" class="btn btn-primary head-action" @click="openAddEpisode">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
           <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
         </svg>
@@ -35,9 +35,12 @@
 
     <!-- 主 Tab：剧集列表 / 素材库 -->
     <nav class="page-tabs">
+      <button type="button" :class="['tab-btn', { on: activeTab === 'script' }]" @click="openProjectScript">
+        {{ t('projectScript.title') }}
+      </button>
       <button type="button" :class="['tab-btn', { on: activeTab === 'episodes' }]" @click="activeTab = 'episodes'">
         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="2.5"/><line x1="7" y1="8" x2="7" y2="16"/><line x1="10" y1="8" x2="10" y2="16"/><line x1="13" y1="8" x2="13" y2="16"/><line x1="16" y1="8" x2="16" y2="16"/></svg>
-        {{ t('detail.tabs.episodes') }}
+        {{ t('projectScript.video') }}
         <span class="tab-count">{{ drama.episodes?.length || 0 }}</span>
       </button>
       <button type="button" :class="['tab-btn', { on: activeTab === 'assets' }]" @click="switchToAssets">
@@ -45,12 +48,19 @@
         {{ t('detail.tabs.assets') }}
         <span v-if="assetTotal > 0" class="tab-count">{{ assetTotal }}</span>
       </button>
+      <button type="button" :class="['tab-btn', { on: activeTab === 'novel' }]" @click="openNovel">
+        {{ t('novel.title') }}
+      </button>
     </nav>
+
+    <ProjectScriptWorkshop v-if="scriptOpened" v-show="activeTab === 'script'" :drama-id="dramaId"
+      :episodes="drama.episodes" @published="load" />
 
     <div v-if="activeTab === 'episodes'" class="ep-grid">
       <div
         v-for="(ep, i) in drama.episodes"
         :key="ep.id"
+        :id="`project-episode-${ep.id}`"
         :class="['card', 'ep-card', `ep-card-${epStatus(ep)}`]"
         :style="{ animationDelay: `${i * 0.05}s` }"
         @click="navigateTo(`/drama/${drama.id}/episode/${ep.episode_number || ep.episodeNumber}`)"
@@ -68,7 +78,7 @@
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
                 {{ ep.duration }}s
               </span>
-              <span v-if="ep.scriptContent || ep.script_content" class="ep-meta ep-meta-ok">
+              <span v-if="ep.has_script" class="ep-meta ep-meta-ok">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
                 {{ t('detail.ep.scriptReady') }}
               </span>
@@ -171,8 +181,11 @@
       </div>
     </div>
 
+    <NovelWorkshop v-if="novelOpened" v-show="activeTab === 'novel'" :drama-id="dramaId"
+      :episodes="drama.episodes" @published="load" @view-episodes="viewNovelEpisodes" />
+
     <!-- 素材库 -->
-    <div v-else-if="activeTab === 'assets'" class="assets-wrap">
+    <div v-if="activeTab === 'assets'" class="assets-wrap">
       <div class="seg asset-filter">
         <button
           v-for="t in assetTabs"
@@ -569,6 +582,7 @@ import { toastError } from '~/composables/useToast'
 import { useI18n } from 'vue-i18n'
 import { dramaAPI, episodeAPI, characterAPI, sceneAPI, propAPI, uploadAPI } from '~/composables/useApi'
 import BaseSelect from '~/components/BaseSelect.vue'
+import NovelWorkshop from '~/components/NovelWorkshop.vue'
 
 const { t, locale } = useI18n()
 
@@ -691,7 +705,25 @@ async function confirmDelEpisode() {
 }
 
 /* ===== 素材库 Tab ===== */
-const activeTab = ref('episodes')
+const novelOpened = ref(route.query.tab === 'novel')
+const activeTab = ref(novelOpened.value ? 'novel' : route.query.tab === 'episodes' ? 'episodes' : 'script')
+const scriptOpened = ref(activeTab.value === 'script')
+function openProjectScript() {
+  scriptOpened.value = true
+  activeTab.value = 'script'
+}
+function openNovel() {
+  novelOpened.value = true
+  activeTab.value = 'novel'
+}
+async function viewNovelEpisodes(episodeId) {
+  activeTab.value = 'episodes'
+  if (!drama.value.episodes.some(episode => episode.id === episodeId)) await load()
+  await nextTick()
+  const entry = document.getElementById(`project-episode-${episodeId}`)
+  entry?.scrollIntoView({ block: 'center' })
+  entry?.querySelector('.ep-enter')?.focus({ preventScroll: true })
+}
 const assetTab = ref('all')
 const assetViewer = ref({ open: false, src: '', title: '' })
 const pendingMaterials = ref(new Set())

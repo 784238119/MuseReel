@@ -1,4 +1,154 @@
 {
+  "projectScript": {
+    "title": "Script",
+    "video": "Video production",
+    "directory": "Script directory",
+    "outline": "Story outline",
+    "episode": "Episode {n}",
+    "previewEpisode": "Batch episode {n} · Preview",
+    "review": "Rewrite preview",
+    "originalUpload": "Original upload",
+    "add": "Add episodes",
+    "continueAI": "Continue the story",
+    "historyNovel": "Previous novels",
+    "useNovel": "Load manuscript",
+    "rewrite": "Rewrite with AI",
+    "rewriteIdea": "What should change in this episode?",
+    "continueIdea": "Continuation notes (optional)",
+    "generate": "Generate",
+    "edit": "Edit",
+    "produce": "Enter production",
+    "before": "Current script",
+    "after": "Proposed rewrite",
+    "apply": "Apply rewrite",
+    "discard": "Discard rewrite",
+    "episodeTitle": "Episode title",
+    "episodeScript": "Episode script",
+    "emptyEpisode": "This episode has no script yet.",
+    "emptyOutline": "Edit the outline, or provide a story idea when adding episodes.",
+    "loading": "Loading…",
+    "sourceText": "Script text",
+    "sourcePlaceholder": "Paste numbered episodes or continuous text",
+    "file": "Choose a TXT or Markdown file",
+    "inspecting": "Detecting episodes…",
+    "detected": "Detected {count} episodes. Their original boundaries will be kept.",
+    "untitled": "Untitled",
+    "invalidAt": "Line {line} has a duplicate or out-of-order number, or an empty episode.",
+    "asContinuous": "Treat as continuous text",
+    "count": "Episode count",
+    "duration": "Target length per episode",
+    "idea": "Story idea",
+    "ideaPlaceholder": "Describe the genre, protagonist, and central conflict",
+    "createAI": "Create and generate",
+    "createUpload": "Upload and create",
+    "submitting": "Creating…",
+    "modes": {
+      "upload": "Upload script",
+      "ai": "Generate script"
+    },
+    "outlineFields": {
+      "synopsis": "Synopsis",
+      "characters": "Characters",
+      "arc": "Story arc"
+    },
+    "durations": {
+      "30–60s": "30–60 seconds",
+      "1–2m": "1–2 minutes",
+      "2–3m": "2–3 minutes"
+    },
+    "stages": {
+      "outline": "Preparing the outline",
+      "writing": "Preparing episode scripts",
+      "publishing": "Saving episodes"
+    },
+    "errors": {
+      "production_locked": "Production has started. The script is read-only here.",
+      "script_conflict": "The script changed. Refresh before trying again.",
+      "outline_required": "Save an outline or enter continuation notes.",
+      "pending_review": "Apply or discard the current rewrite first.",
+      "invalid_script": "Use scene headers such as “## S01 | Interior · Station | Morning”.",
+      "invalid_episode_headings": "Check the episode headings and text, or choose continuous text."
+    }
+  },
+  "novel": {
+    "title": "Novel writing",
+    "brief": "Story brief",
+    "briefPlaceholder": "Describe the setting, protagonist, central conflict, and any ending you have in mind.",
+    "episodeCount": "Episodes",
+    "targetLength": "Target words per episode",
+    "model": "Text model",
+    "appendHint": "The novel is edited first, then split into the requested number of episodes and added to this project.",
+    "history": "Writing history",
+    "progress": "{done}/{total} chapters complete",
+    "retry": "Resume writing",
+    "keepModel": "Keep {model}",
+    "chapters": "Chapters",
+    "openEpisode": "Open episode {n}",
+    "reloadChapter": "Reload chapter",
+    "reloadModels": "Reload models",
+    "states": {
+      "planning": "Planning",
+      "writing": "Writing",
+      "publishing": "Creating episodes",
+      "completed": "Novel and episodes ready",
+      "failed": "Generation paused",
+      "interrupted": "Generation interrupted",
+      "analyzing": "Reading the manuscript",
+      "optimizing": "Editing the manuscript",
+      "splitting": "Splitting into episodes",
+      "ready": "The draft is ready to preview and split."
+    },
+    "errors": {
+      "models_load_failed": "Could not load the text model list.",
+      "model_unavailable": "Configure and enable the selected text model in Settings.",
+      "image_unavailable": "Enable an image generation configuration first.",
+      "video_unavailable": "Enable a video generation configuration first.",
+      "job_running": "This project already has a novel in progress.",
+      "invalid_request": "Check the brief, episode count, length, and model.",
+      "invalid_output": "The model returned invalid output. Resume from the last save.",
+      "truncated": "The model output was cut off. Resume from the last save.",
+      "generation_failed": "The text model request failed. Check the model settings and resume.",
+      "timeout": "The model request timed out. Resume from the last save.",
+      "publish_failed": "Episode creation failed. The novel is saved and you can retry.",
+      "project_unavailable": "The project is unavailable.",
+      "interrupted": "The service restarted. Resume from the last save.",
+      "load_failed": "Could not load. Try again shortly.",
+      "source_too_large": "The imported text must be 5 MiB or smaller.",
+      "invalid_file": "Choose a UTF-8 TXT or Markdown file containing the novel.",
+      "manuscript_too_short": "The manuscript is too short for this count. Choose fewer episodes and try again.",
+      "draft_not_ready": "The draft is still being prepared."
+    },
+    "sources": {
+      "ai": "Write with AI",
+      "import": "Import novel"
+    },
+    "sourceText": "Novel text",
+    "sourcePlaceholder": "Paste the novel, or choose a file.",
+    "file": "Choose a file (UTF-8 TXT / Markdown, up to 5 MiB)",
+    "manuscripts": "Manuscript versions",
+    "versions": {
+      "draft": "Original",
+      "optimized": "Edited",
+      "episodes": "Episodes"
+    },
+    "previous": "Previous",
+    "next": "Next",
+    "part": "Part {part} of {total}",
+    "loading": "Loading manuscript…",
+    "partProgress": "{done}/{total} parts complete",
+    "episodeProgress": "{done}/{total} episodes complete",
+    "splitAgent": "Novel splitting",
+    "prepare": "Prepare a novel",
+    "generateDraft": "Generate novel",
+    "saveDraft": "Save and preview",
+    "preview": "Novel preview",
+    "newNovel": "New novel",
+    "totalLength": "Target total length",
+    "splitNow": "Split into episodes",
+    "viewEpisodes": "View episodes",
+    "published": "Created {count} episode(s) · {range}",
+    "reload": "Reload"
+  },
   "app": {
     "title": "MuseReel",
     "updateAvailable": "New version v{version} is available. Upgrade in Settings → About."
@@ -152,7 +302,7 @@
     },
     "createDialog": {
       "title": "New Project",
-      "desc": "Pick an episode on the project page after creation",
+      "desc": "Start by writing with AI or importing an existing novel",
       "name": "Project name",
       "namePlaceholder": "e.g. Urban romance drama “The Time Post Office”",
       "style": "Visual style",
@@ -457,6 +607,9 @@
   },
   "episode": {
     "topbar": {
+      "unavailable": "This episode does not exist or has been deleted",
+      "loadFailed": "Could not load the episode",
+      "retryLoad": "Retry",
       "back": "Back to Project",
       "episodeN": "Episode {n}",
       "meta": "{roles} characters · {shots} segments",
@@ -907,7 +1060,7 @@
     "index": {
       "welcome": {
         "title": "👋 Welcome to MuseReel",
-        "desc": "Novel → script → assets → storyboard → video → final cut, all in one place. Configure AI services first, then create your first project."
+        "desc": "Script → assets → storyboard → video → final cut. Configure AI services first, then create your first project."
       },
       "create": {
         "title": "Step 2 · Create a project",

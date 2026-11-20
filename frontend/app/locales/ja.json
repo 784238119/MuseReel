@@ -1,4 +1,154 @@
 {
+  "projectScript": {
+    "title": "脚本",
+    "video": "動画制作",
+    "directory": "脚本一覧",
+    "outline": "脚本のあらすじ",
+    "episode": "第 {n} 話",
+    "previewEpisode": "今回の第 {n} 話 · プレビュー",
+    "review": "書き直しのプレビュー",
+    "originalUpload": "アップロード原稿",
+    "add": "話を追加",
+    "continueAI": "続きを書く",
+    "historyNovel": "過去の小説",
+    "useNovel": "原稿を読み込む",
+    "rewrite": "AIで書き直す",
+    "rewriteIdea": "この話の変更点を入力",
+    "continueIdea": "続きの方向性（任意）",
+    "generate": "生成",
+    "edit": "編集",
+    "produce": "制作に進む",
+    "before": "現在の脚本",
+    "after": "書き直し案",
+    "apply": "変更を適用",
+    "discard": "案を破棄",
+    "episodeTitle": "話のタイトル",
+    "episodeScript": "各話の脚本",
+    "emptyEpisode": "この話の脚本はまだありません。",
+    "emptyOutline": "あらすじを編集するか、話を追加するときに物語の設定を入力してください。",
+    "loading": "読み込み中…",
+    "sourceText": "脚本の本文",
+    "sourcePlaceholder": "話番号付き脚本または連続した本文を貼り付けてください",
+    "file": "TXTまたはMarkdownファイルを選択",
+    "inspecting": "話を検出中…",
+    "detected": "{count} 話を検出しました。元の区切りを保持します。",
+    "untitled": "タイトルなし",
+    "invalidAt": "{line} 行目の話番号が重複、順不同、または本文がありません。",
+    "asContinuous": "連続した本文として処理",
+    "count": "目標話数",
+    "duration": "各話の目標時間",
+    "idea": "物語のアイデア",
+    "ideaPlaceholder": "ジャンル、主人公、中心となる対立を入力",
+    "createAI": "作成して生成",
+    "createUpload": "アップロードして作成",
+    "submitting": "作成中…",
+    "modes": {
+      "upload": "脚本をアップロード",
+      "ai": "脚本を生成"
+    },
+    "outlineFields": {
+      "synopsis": "物語の概要",
+      "characters": "登場人物",
+      "arc": "物語の展開"
+    },
+    "durations": {
+      "30–60s": "30–60 秒",
+      "1–2m": "1–2 分",
+      "2–3m": "2–3 分"
+    },
+    "stages": {
+      "outline": "あらすじを準備中",
+      "writing": "各話の脚本を準備中",
+      "publishing": "各話を保存中"
+    },
+    "errors": {
+      "production_locked": "制作を開始済みです。ここでは閲覧のみ可能です。",
+      "script_conflict": "脚本が変更されました。再読み込みしてください。",
+      "outline_required": "あらすじを保存するか、続きの方向性を入力してください。",
+      "pending_review": "現在の書き直し案を適用するか破棄してください。",
+      "invalid_script": "「## S01 | 内景 · 駅 | 朝」のようなシーン見出しを使用してください。",
+      "invalid_episode_headings": "話番号と本文を確認するか、連続した本文として処理してください。"
+    }
+  },
+  "novel": {
+    "title": "小説作成",
+    "brief": "創作設定",
+    "briefPlaceholder": "舞台、主人公、主な対立、希望する結末を書いてください。",
+    "episodeCount": "目標話数",
+    "targetLength": "1話あたりの目標文字数",
+    "model": "テキストモデル",
+    "appendHint": "全文を推敲して指定の話数に分割し、プロジェクトに追加します。",
+    "history": "作成履歴",
+    "progress": "全 {total} 章中 {done} 章が完了",
+    "retry": "作成を再開",
+    "keepModel": "{model} を引き続き使用",
+    "chapters": "章一覧",
+    "openEpisode": "第 {n} 話を開く",
+    "reloadChapter": "章を再読み込み",
+    "reloadModels": "モデルを再読み込み",
+    "states": {
+      "planning": "構成を作成中",
+      "writing": "執筆中",
+      "publishing": "エピソードを作成中",
+      "completed": "小説とエピソードが完成",
+      "failed": "作成を一時停止",
+      "interrupted": "作成が中断されました",
+      "analyzing": "原稿を確認中",
+      "optimizing": "原稿を推敲中",
+      "splitting": "各話に分割中",
+      "ready": "原稿を保存しました。プレビューして各話に分割できます。"
+    },
+    "errors": {
+      "models_load_failed": "テキストモデルの一覧を読み込めませんでした。",
+      "model_unavailable": "設定で選択したテキストモデルを有効にしてください。",
+      "image_unavailable": "画像生成設定を有効にしてください。",
+      "video_unavailable": "動画生成設定を有効にしてください。",
+      "job_running": "このプロジェクトでは小説を作成中です。",
+      "invalid_request": "創作設定、話数、文字数、モデルを確認してください。",
+      "invalid_output": "モデルの出力形式が無効です。保存箇所から再開できます。",
+      "truncated": "モデルの出力が途中で終了しました。保存箇所から再開できます。",
+      "generation_failed": "モデルの呼び出しに失敗しました。設定を確認して再開してください。",
+      "timeout": "モデルの応答がタイムアウトしました。保存箇所から再開できます。",
+      "publish_failed": "エピソードの作成に失敗しました。本文は保存済みです。",
+      "project_unavailable": "プロジェクトを利用できません。",
+      "interrupted": "サービスが再起動しました。保存箇所から再開できます。",
+      "load_failed": "読み込めませんでした。しばらくしてから再試行してください。",
+      "source_too_large": "本文は 5 MiB 以下にしてください。",
+      "invalid_file": "本文が含まれた UTF-8 の TXT または Markdown ファイルを選択してください。",
+      "manuscript_too_short": "指定の話数には原稿が短すぎます。話数を減らして分割してください。",
+      "draft_not_ready": "原稿はまだ準備中です。"
+    },
+    "sources": {
+      "ai": "AIで執筆",
+      "import": "小説をインポート"
+    },
+    "sourceText": "小説本文",
+    "sourcePlaceholder": "小説の本文を貼り付けるか、ファイルを選択してください。",
+    "file": "ファイルを選択（UTF-8 TXT / Markdown、最大 5 MiB）",
+    "manuscripts": "原稿のバージョン",
+    "versions": {
+      "draft": "原稿",
+      "optimized": "推敲稿",
+      "episodes": "各話"
+    },
+    "previous": "前へ",
+    "next": "次へ",
+    "part": "{part} / {total}",
+    "loading": "本文を読み込み中…",
+    "partProgress": "{done}/{total} 部完了",
+    "episodeProgress": "{done}/{total} 話完了",
+    "splitAgent": "小説の分割",
+    "prepare": "小説の準備",
+    "generateDraft": "小説を生成",
+    "saveDraft": "保存してプレビュー",
+    "preview": "小説のプレビュー",
+    "newNovel": "新しい小説",
+    "totalLength": "目標の総文字数",
+    "splitNow": "各話に分割",
+    "viewEpisodes": "各話を表示",
+    "published": "{count} 話を作成済み · 第 {range} 話",
+    "reload": "再読み込み"
+  },
   "app": {
     "title": "MuseReel",
     "updateAvailable": "新バージョン v{version} があります。「設定 → 更新について」でアップグレードできます"
@@ -152,7 +302,7 @@
     },
     "createDialog": {
       "title": "新規プロジェクト",
-      "desc": "作成後、プロジェクトページで話を選択します",
+      "desc": "作成後、AIで小説を執筆するか、既存の小説をインポートできます",
       "name": "プロジェクト名",
       "namePlaceholder": "例：都市ラブストーリー『タイムポスト局』",
       "style": "ビジュアルスタイル",
@@ -457,6 +607,9 @@
   },
   "episode": {
     "topbar": {
+      "unavailable": "エピソードが見つからないか、削除されています",
+      "loadFailed": "エピソードを読み込めませんでした",
+      "retryLoad": "再試行",
       "back": "プロジェクトに戻る",
       "episodeN": "第 {n} 話",
       "meta": "{roles} キャラクター · {shots} セグメント",
@@ -907,7 +1060,7 @@
     "index": {
       "welcome": {
         "title": "👋 MuseReel へようこそ",
-        "desc": "小説 → 脚本 → アセット → 絵コンテ → 動画 → 完成、すべてワンストップ。まず AI サービスを設定し、最初のプロジェクトを作成しましょう。"
+        "desc": "脚本 → アセット → 絵コンテ → 動画 → 完成。まず AI サービスを設定し、最初のプロジェクトを作成しましょう。"
       },
       "create": {
         "title": "ステップ 2 · プロジェクト作成",

@@ -7,22 +7,25 @@ import { Hono } from 'hono'
 import { success, badRequest } from '../utils/response.js'
 import { skillsManagerWorkspace } from '../agents/skills.js'
 import { validAgentTypes, DEFAULT_PROMPTS } from '../agents/index.js'
+import { NOVEL_PROMPTS } from '../agents/novel-prompts.js'
 import { loadAgentPromptFile, serializePromptFile, promptFilePath } from '../agents/prompts.js'
 
 const app = new Hono()
 const fsm = () => skillsManagerWorkspace.filesystem!
 
-const checkType = (type: string) => validAgentTypes.includes(type)
+const promptTypes = [...validAgentTypes, ...Object.keys(NOVEL_PROMPTS)]
+const prompts: typeof DEFAULT_PROMPTS = { ...DEFAULT_PROMPTS, ...NOVEL_PROMPTS }
+const checkType = (type: string) => promptTypes.includes(type)
 const LANGS = ['zh', 'en', 'ja', 'ko']
 const normalizeLang = (v?: string) => (v && LANGS.includes(v) ? v : 'zh')
 
 // GET /prompts — 列出全部 Agent 的 prompt 状态（基础版口径；name/model 只属于基础版）
 app.get('/', async (c) => {
-  const list = await Promise.all(validAgentTypes.map(async (type) => {
+  const list = await Promise.all(promptTypes.map(async (type) => {
     const file = await loadAgentPromptFile(type)
     return {
       agent_type: type,
-      name: file?.name || DEFAULT_PROMPTS[type].name,
+      name: file?.name || prompts[type].name,
       model: file?.model || '',
       is_default: !file,
     }
@@ -46,7 +49,7 @@ app.get('/:type', async (c) => {
     return success(c, {
       agent_type: type,
       lang,
-      name: base?.name || file.name || DEFAULT_PROMPTS[type].name,
+      name: base?.name || file.name || prompts[type].name,
       model: base?.model || file.model,
       system_prompt: file.instructions,
       is_default: lang === 'zh' ? false : !variantExists,
@@ -55,9 +58,9 @@ app.get('/:type', async (c) => {
   return success(c, {
     agent_type: type,
     lang,
-    name: DEFAULT_PROMPTS[type].name,
+    name: prompts[type].name,
     model: '',
-    system_prompt: DEFAULT_PROMPTS[type].instructions,
+    system_prompt: prompts[type].instructions,
     is_default: true,
   })
 })
@@ -71,14 +74,14 @@ app.put('/:type', async (c) => {
   const instructions = String(body.system_prompt ?? '').trim()
   if (!instructions) return badRequest(c, 'system_prompt 必填')
   if (lang === 'zh') {
-    const name = String(body.name || DEFAULT_PROMPTS[type].name)
+    const name = String(body.name || prompts[type].name)
     const model = String(body.model ?? '').trim()
     await fsm().writeFile(promptFilePath(type), serializePromptFile({ name, model, instructions }), { recursive: true })
     return success(c, { agent_type: type, lang, name, model, is_default: false })
   }
   // 语言变体：model 不从变体读取，name 仅作展示；保留变体自己的 name（缺省用基础版/默认名）
   const base = await loadAgentPromptFile(type)
-  const name = String(body.name || base?.name || DEFAULT_PROMPTS[type].name)
+  const name = String(body.name || base?.name || prompts[type].name)
   await fsm().writeFile(promptFilePath(type, lang), serializePromptFile({ name, model: '', instructions }), { recursive: true })
   return success(c, { agent_type: type, lang, name, is_default: false })
 })

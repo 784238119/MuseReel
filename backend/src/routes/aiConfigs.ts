@@ -4,7 +4,7 @@ import { db, getInsertId, schema } from '../db/index.js'
 import { success, notFound, created, badRequest, now } from '../utils/response.js'
 import { toSnakeCase } from '../utils/transform.js'
 import { joinProviderUrl } from '../services/adapters/url.js'
-import { isOfficialProvider, parseConfigTemperature } from '../services/ai.js'
+import { isOfficialProvider, parseConfigModels, parseConfigTemperature } from '../services/ai.js'
 import { redactUrl, logTaskError, logTaskProgress, logTaskSuccess } from '../utils/task-logger.js'
 
 const app = new Hono()
@@ -21,7 +21,7 @@ function normalizeTemperature(v: any): number | null {
 function withParsedFields(r: any) {
   return {
     ...toSnakeCase(r),
-    model: r.model ? JSON.parse(r.model) : [],
+    model: parseConfigModels(r.model),
     temperature: parseConfigTemperature(r.settings),
   }
 }

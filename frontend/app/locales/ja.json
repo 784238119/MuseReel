@@ -22,6 +22,7 @@
     "attempt": "第 {n} 回",
     "retryCurrentModel": "現在のモデルで再試行",
     "retryAnotherModel": "別のモデルで再試行",
+    "retryLatestOnly": "再試行できるのは最新の実行のみです。過去の試行は確認用に残ります。",
     "retryWithModel": "このモデルで再試行",
     "actualModel": "使用モデル",
     "lastCompletedStep": "最後に完了した処理",

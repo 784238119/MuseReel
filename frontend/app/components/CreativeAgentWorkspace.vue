@@ -155,11 +155,12 @@
                     @click="inspect(activeAttempt(group).id, item.change)"><FileText :size="15" />{{ resultLabel(item.change) }}</button>
                 </div>
 
-                <section v-if="isFailure(activeAttempt(group))" class="run-failure" role="alert">
+                <section v-if="isFailure(activeAttempt(group))" class="run-failure" role="group"
+                  :aria-labelledby="`failure-title-${activeAttempt(group).id}`">
                   <div class="failure-head">
                     <span class="failure-icon"><CircleAlert :size="18" /></span>
                     <div>
-                      <h3>{{ failureTitle(activeAttempt(group)) }}</h3>
+                      <h3 :id="`failure-title-${activeAttempt(group).id}`">{{ failureTitle(activeAttempt(group)) }}</h3>
                       <p>{{ errorLabel(activeAttempt(group).error_code || activeAttempt(group).status) }}</p>
                     </div>
                   </div>
@@ -169,18 +170,22 @@
                     <div><dt>{{ t('creativeAgent.elapsed') }}</dt><dd>{{ turnDuration(activeAttempt(group)) || '—' }}</dd></div>
                   </dl>
                   <div class="failure-actions">
-                    <button type="button" class="btn btn-primary btn-sm" :disabled="sending || !!running" @click="retryAttempt(activeAttempt(group))">
+                    <button v-if="canRetry(activeAttempt(group))" type="button" class="btn btn-primary btn-sm"
+                      :disabled="sending || !!running" @click="retryAttempt(activeAttempt(group))">
                       <RotateCcw :size="14" />
                       {{ t(changesFor(activeAttempt(group).id).length ? 'creativeAgent.continue' : 'creativeAgent.retryCurrentModel') }}
                     </button>
-                    <button type="button" class="btn btn-sm" :disabled="sending || !!running" @click="openRetryModel(activeAttempt(group))">
+                    <button v-if="canRetry(activeAttempt(group))" type="button" class="btn btn-sm"
+                      :disabled="sending || !!running" @click="openRetryModel(activeAttempt(group))">
                       <RefreshCw :size="14" />{{ t('creativeAgent.retryAnotherModel') }}
                     </button>
                     <button type="button" class="history-link" @click="diagnosticsOpen = diagnosticsOpen === activeAttempt(group).id ? null : activeAttempt(group).id">
                       {{ t('creativeAgent.viewDetails') }}
                     </button>
                   </div>
-                  <form v-if="retryTurnId === activeAttempt(group).id" class="retry-model-form" @submit.prevent="retryAttempt(activeAttempt(group), true)">
+                  <p v-if="!canRetry(activeAttempt(group))" class="failure-history-note">{{ t('creativeAgent.retryLatestOnly') }}</p>
+                  <form v-if="canRetry(activeAttempt(group)) && retryTurnId === activeAttempt(group).id" class="retry-model-form"
+                    @submit.prevent="retryAttempt(activeAttempt(group), true)">
                     <ModelSelect v-if="models.length" v-model="retryModelKey" hide-default :label="t('creativeAgent.model')"
                       :options="models" :default-label="selectedModelOption?.model || t('creativeAgent.defaultModel')" />
                     <button type="submit" class="btn btn-primary btn-sm" :disabled="sending || !!running">{{ t('creativeAgent.retryWithModel') }}</button>
@@ -235,7 +240,8 @@
               <button v-if="nextResource !== null" type="button" @click="fetchMaterials(true)">{{ t('creativeAgent.moreResources') }}</button>
             </div>
           </div>
-          <ModelSelect v-if="models.length" v-model="modelKey" hide-default label=""
+          <ModelSelect v-if="models.length" :model-value="modelKey" hide-default label=""
+            @update:model-value="chooseModel"
             :options="models" :default-label="t('creativeAgent.defaultModel')" />
           <NuxtLink v-else-if="modelLoaded" class="history-link" to="/settings">{{ t('creativeAgent.configureModel') }}</NuxtLink>
           <button v-if="running" type="button" class="send-button stop-button" :disabled="stopping"
@@ -341,19 +347,22 @@ function rememberModel(sessionId = selected.value) {
   if (!modelKey.value) return
   try { localStorage.setItem(modelStorageKey(sessionId), modelKey.value) } catch { /* optional preference */ }
 }
+function chooseModel(value: string) {
+  modelKey.value = value
+  rememberModel()
+}
 function restoreModelSelection() {
   if (!models.value.length) return
   let remembered = ''
   try { remembered = localStorage.getItem(modelStorageKey()) || '' } catch { /* optional preference */ }
   const lastSuccessful = [...turns.value].reverse().find(turn => turn.status === 'completed')
   const fromTurn = lastSuccessful ? optionForTurn(lastSuccessful)?.key ?? '' : ''
-  const next = [fromTurn, remembered, modelKey.value, models.value[0]?.key]
+  const next = [remembered, fromTurn, modelKey.value, models.value[0]?.key]
     .find(key => !!key && models.value.some(option => option.key === key))
   if (next) modelKey.value = next
 }
 watch(models, restoreModelSelection)
 watch(selected, () => { nextTick(restoreModelSelection) })
-watch(modelKey, () => rememberModel())
 
 function errorLabel(code: string) {
   const own = `creativeAgent.errors.${code}`
@@ -491,6 +500,9 @@ function runIdleText(turn: CreativeTurn) {
 function isFailure(turn: CreativeTurn) {
   return ['partial', 'failed', 'interrupted', 'stopped'].includes(turn.status)
 }
+function canRetry(turn: CreativeTurn) {
+  return turn.id === turns.value.at(-1)?.id && ['partial', 'failed', 'interrupted', 'stopped'].includes(turn.status)
+}
 function failureTitle(turn: CreativeTurn) {
   if (turn.error_code === 'timeout') return t('creativeAgent.failureTitles.timeout')
   if (turn.status === 'interrupted') return t('creativeAgent.failureTitles.interrupted')
@@ -507,13 +519,17 @@ function openRetryModel(turn: CreativeTurn) {
   retryModelKey.value = optionForTurn(turn)?.key ?? modelKey.value
 }
 async function retryAttempt(turn: CreativeTurn, explicitModel = false) {
-  if (sending.value || running.value) return
+  if (!canRetry(turn) || sending.value || running.value) return
   const choice = resolveTextModelSelection(models.value, explicitModel ? retryModelKey.value : modelKey.value)
   if (!choice.model || !choice.configId) return
   const text = changesFor(turn.id).length ? t('creativeAgent.continuePrompt') : turn.message
   const refs = turn.references.map(({ kind, id, scene }) => ({ kind, id, scene }))
   const created = await send(text, refs, { config_id: choice.configId, model: choice.model }, turn.id)
   if (!created) return
+  if (explicitModel && retryModelKey.value) {
+    modelKey.value = retryModelKey.value
+    rememberModel(created.session_id)
+  }
   const root = turnGroups.value.find(group => group.attempts.some(attempt => attempt.id === created.id))
     ?? turnGroups.value.find(group => group.attempts.includes(turn))
   if (root) selectAttempt(root.root.id, created.id)
@@ -764,6 +780,7 @@ onBeforeUnmount(() => {
 .failure-facts dd { margin-top: 2px; overflow: hidden; color: var(--text-1); font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
 .failure-actions { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
 .failure-actions .history-link { margin-inline-start: auto; }
+.failure-history-note { color: var(--text-3); font-size: 11px; }
 .retry-model-form { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding-top: 3px; }
 .failure-details { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 8px; border-top: 1px dashed var(--border); color: var(--text-3); font-size: 11px; }
 .failure-details code { color: var(--text-2); }

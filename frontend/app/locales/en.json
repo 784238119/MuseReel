@@ -22,6 +22,7 @@
     "attempt": "Attempt {n}",
     "retryCurrentModel": "Retry current model",
     "retryAnotherModel": "Retry with another model",
+    "retryLatestOnly": "Only the latest run can be retried; earlier attempts remain available for review.",
     "retryWithModel": "Retry with this model",
     "actualModel": "Model used",
     "lastCompletedStep": "Last completed",

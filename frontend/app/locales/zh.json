@@ -22,6 +22,7 @@
     "attempt": "第 {n} 次",
     "retryCurrentModel": "用当前模型重试",
     "retryAnotherModel": "换模型重试",
+    "retryLatestOnly": "仅最新一轮可以继续重试，历史尝试保留供查看。",
     "retryWithModel": "用此模型重试",
     "actualModel": "实际模型",
     "lastCompletedStep": "最后完成",

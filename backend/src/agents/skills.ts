@@ -41,6 +41,7 @@ const AGENT_SKILL_MAP: Record<string, string[]> = {
   extractor: ['extractor'],
   storyboard_breaker: ['storyboard-breaker'],
   novel_writer: ['novel-writer'],
+  creative_agent: ['creative-agent'],
   novel_splitter: ['novel-splitter'],
   prompt_generator: [
     'prompt-generator/character-prompt',

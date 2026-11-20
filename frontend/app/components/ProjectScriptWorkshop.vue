@@ -29,6 +29,7 @@
     </aside>
 
     <div class="screenplay-main">
+      <p v-if="editing && externalChange" class="dim" role="status">{{ t('creativeAgent.editorChanged') }}</p>
       <div v-if="loadError" class="script-actions" role="alert">
         {{ t('novel.errors.load_failed') }}
         <button type="button" class="btn btn-sm" @click="refresh">{{ t('novel.reload') }}</button>
@@ -152,7 +153,7 @@ import { toast } from 'vue-sonner'
 import { useI18n } from 'vue-i18n'
 import { novelAPI, projectScriptAPI } from '~/composables/useApi'
 
-const props = defineProps({ dramaId: Number, episodes: { type: Array, default: () => [] } })
+const props = defineProps({ dramaId: Number, episodes: { type: Array, default: () => [] }, externalRevision: { type: Number, default: 0 } })
 const emit = defineEmits(['published'])
 const { t, te } = useI18n()
 const { submitting, submit } = useScriptSubmission()
@@ -164,6 +165,7 @@ const readerError = ref(false)
 const loadError = ref(false)
 const readerRevision = ref(0)
 const editing = ref(false)
+const externalChange = ref(false)
 const saving = ref(false)
 const outlineDraft = ref(null)
 const episodeDraft = ref(null)
@@ -223,6 +225,24 @@ function select(value) {
   jobForm.value = null
   view.value = value
 }
+
+function openDocument(episodeId) {
+  if (editing.value) { externalChange.value = true; return }
+  select(episodeId === null ? 'outline' : `episode:${episodeId}`)
+}
+defineExpose({ openDocument })
+watch(() => props.externalRevision, () => {
+  if (editing.value) { externalChange.value = true; return }
+  void refresh()
+  readerRevision.value++
+})
+watch(editing, value => {
+  if (!value && externalChange.value) {
+    externalChange.value = false
+    void refresh()
+    readerRevision.value++
+  }
+})
 
 watch([view, () => job.value?.id, readerRevision], async ([value, id], _, onCleanup) => {
   let stale = false

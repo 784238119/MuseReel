@@ -841,6 +841,7 @@ const agentDefs = computed(() => [
   { type: 'prompt_generator', label: t('settings.agents.promptGenerator'), icon: '🖼' },
   { type: 'novel_writer', label: t('novel.title'), icon: '📖' },
   { type: 'novel_writer_chat', label: t('novel.chat.title'), icon: '📖' },
+  { type: 'creative_agent', label: t('creativeAgent.title'), icon: '📖' },
   { type: 'novel_splitter', label: t('novel.splitAgent'), icon: '📑' },
 ])
 
@@ -958,7 +959,6 @@ async function loadContentLanguage() {
   try {
     const lang = (await settingsAPI.contentLanguage())?.language || 'zh'
     contentLanguage.value = lang
-    editLang.value = lang  // Agent 编辑器默认跟随内容语言
   } catch { /* 保持默认 */ }
 }
 async function setContentLanguage(lang) {
@@ -966,8 +966,6 @@ async function setContentLanguage(lang) {
   // UI 语言 = AI 内容语言：确认弹窗 → 统一切换 → 刷新（顶栏 LocaleSwitcher 同一入口）
   await confirmUnifiedLanguage(lang)
 }
-onMounted(loadContentLanguage)
-
 // agent type 用下划线（script_rewriter），skill 目录按 Mastra 规范用连字符（script-rewriter）
 const skillDirOf = (type) => type === 'novel_writer_chat' ? 'novel-writer' : type.replace(/_/g, '-')
 const skillBelongsTo = (skillId, type) => {
@@ -1143,7 +1141,14 @@ async function saveStyle() {
   } catch (e) { toastError(e) }
 }
 
-onMounted(() => { loadCfgs(); loadAgents(); loadAllSkills(); loadAgentPrompt(selectedAgent.value); loadStylePresets() })
+onMounted(async () => {
+  await loadContentLanguage()
+  loadCfgs()
+  loadAgents()
+  loadAllSkills()
+  loadAgentPrompt(selectedAgent.value)
+  loadStylePresets()
+})
 
 // ===== 应用内引导（设置页） =====
 const SETTINGS_TOUR = [

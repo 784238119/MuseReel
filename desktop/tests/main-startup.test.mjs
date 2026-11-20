@@ -31,7 +31,25 @@ async function boot(mode = 'pending', options = {}) {
       ? callback(null, options.shortPath, '')
       : callback(new Error('short path unavailable'), '', ''))
   } }
-  const filesystem = { existsSync: p => !/storage-config|template-version|startup.log/.test(p), mkdirSync() {}, cpSync() {}, writeFileSync() {}, appendFileSync: (_p, s) => logs.push(s) }
+  const copies = [], replacements = [], writes = []
+  const filesystem = {
+    existsSync(p) {
+      if (p.endsWith('.template-version')) return !!options.templateVersion
+      if (p.endsWith('novel-writer/SKILL.md')) return options.novelSkill !== undefined
+      return !/storage-config|startup.log/.test(p)
+    },
+    readFileSync(p) {
+      if (p.endsWith('.template-version')) return options.templateVersion
+      if (p.endsWith('novel-writer/SKILL.md')) return options.novelSkill
+      throw new Error(`Unexpected read: ${p}`)
+    },
+    mkdirSync() {},
+    cpSync: (...args) => copies.push(args),
+    copyFileSync: (...args) => copies.push(args),
+    renameSync: (...args) => replacements.push(args),
+    writeFileSync: (...args) => writes.push(args),
+    appendFileSync: (_p, s) => logs.push(s),
+  }
   const fakeProcess = new EventEmitter()
   Object.assign(fakeProcess, { platform: 'win32', arch: 'x64', env: {}, versions: { electron: '37.10.3' }, pid: 123, resourcesPath: options.resourcesPath || '/mock/resources', stdout: new EventEmitter(), stderr: new EventEmitter() })
   fakeProcess.stdout.write = fakeProcess.stderr.write = () => true
@@ -51,7 +69,7 @@ async function boot(mode = 'pending', options = {}) {
   vm.runInContext(code, context)
   async function flush() { for(let i=0;i<50;i++) await Promise.resolve() }
   await flush()
-  return { windows, errors, logs, app, child, requests: () => requests, forks: () => forks, forkArgs: () => forkArgs, flush,
+  return { windows, errors, logs, copies, replacements, writes, app, child, requests: () => requests, forks: () => forks, forkArgs: () => forkArgs, flush,
     async expireHealth() { now=60_001; for(const t of [...timers.values()]) if(t.at <= now && t.at <= 1000) {timers.delete(t.id);t.fn()} await flush() } }
 }
 
@@ -92,4 +110,39 @@ test('non-ASCII Windows install resources use one short path for backend and med
 })
 test('closing while backend starts cancels silently', async () => {
   const p=await boot(); p.app.quit(); await p.expireHealth(); assert.equal(p.errors.length,0)
+})
+
+test('workspace upgrade replaces the untouched v5 novelist skill and preserves customized skills', async () => {
+  const original = `---
+name: novel-writer
+description: 小说故事规划、章节衔接和原稿润色
+---
+
+# 小说创作与润色
+
+## 规划与成稿
+
+- 从创作设定中提取主角的目标、阻力、关键选择和结局。安排章节时检查每章推动了哪一条情节，以及上一章的结果如何引出本章。
+- 编写和更新故事笔记时记录角色别名、关系、已知信息、时间地点、关键物件和未回收伏笔。区分正文已交代的事实与仍待确认的推断。
+- 写作时让每个主要场景产生可追踪的变化，例如角色作出决定、关系转变或掌握新信息。检查前一章留下的动作和对话在本章开头有自然衔接。
+
+## 通读与润色
+
+- 通读时优先定位会影响后续理解的问题，记下矛盾出现在哪里，以及哪一处有明确的上下文依据。
+- 润色指定片段时优先处理重复、指代不清、不自然的过渡和明显的前后矛盾。证据不足时保留原有描述。
+- 保留角色、主线、结局、原有叙述视角及段落结构。相邻片段用于检查衔接。按当前请求指定的范围和格式返回内容。
+`
+  const updated = await boot('healthy', { templateVersion: '5', novelSkill: original.replaceAll('\n', '\r\n') })
+  assert.equal(updated.forks(), 1)
+  assert.equal(updated.copies.length, 1)
+  const [source, temporary] = updated.copies[0]
+  assert.match(source, /workspace-template\/skills\/novel-writer\/SKILL\.md$/)
+  assert.deepEqual(updated.replacements, [[temporary, temporary.replace(/\.template-tmp$/, '')]])
+  assert.equal(updated.writes.find(([file]) => file.endsWith('.template-version'))?.[1], '6')
+
+  const customized = await boot('healthy', { templateVersion: '5', novelSkill: original + '\n自定义规则。' })
+  assert.equal(customized.forks(), 1)
+  assert.deepEqual(customized.copies, [])
+  assert.deepEqual(customized.replacements, [])
+  assert.equal(customized.writes.find(([file]) => file.endsWith('.template-version'))?.[1], '6')
 })

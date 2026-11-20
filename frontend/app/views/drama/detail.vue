@@ -181,7 +181,7 @@
       </div>
     </div>
 
-    <NovelWorkshop v-if="novelOpened" v-show="activeTab === 'novel'" :drama-id="dramaId"
+    <NovelWorkshop v-if="novelOpened" v-show="activeTab === 'novel'" :key="dramaId" :drama-id="dramaId"
       :episodes="drama.episodes" @published="load" @view-episodes="viewNovelEpisodes" />
 
     <!-- 素材库 -->
@@ -587,6 +587,7 @@ import NovelWorkshop from '~/components/NovelWorkshop.vue'
 const { t, locale } = useI18n()
 
 const route = useRoute()
+const router = useRouter()
 const drama = ref(null)
 const dramaId = Number(route.params.id)
 const addDialog = ref(false)
@@ -708,6 +709,10 @@ async function confirmDelEpisode() {
 const novelOpened = ref(route.query.tab === 'novel')
 const activeTab = ref(novelOpened.value ? 'novel' : route.query.tab === 'episodes' ? 'episodes' : 'script')
 const scriptOpened = ref(activeTab.value === 'script')
+watch(activeTab, (tab, previous) => {
+  if (tab !== 'novel' && previous !== 'novel') return
+  void router.replace({ query: { ...route.query, tab: tab === 'novel' || tab === 'episodes' ? tab : undefined } })
+})
 function openProjectScript() {
   scriptOpened.value = true
   activeTab.value = 'script'

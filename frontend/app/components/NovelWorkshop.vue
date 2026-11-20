@@ -11,14 +11,14 @@
         <button v-if="job" class="btn btn-sm" type="button" @click="creating = false">{{ t('common.back') }}</button>
       </div>
       <div class="novel-tabs" role="group" :aria-label="t('novel.title')">
-        <button v-for="type in ['ai', 'import']" :key="type" type="button" class="btn"
+        <button v-for="type in ['chat', 'ai', 'import']" :key="type" type="button" class="btn"
           :class="{ 'btn-primary': sourceType === type }" :aria-pressed="sourceType === type"
-          @click="sourceType = type">{{ t(`novel.sources.${type}`) }}</button>
+          @click="sourceType = type">{{ t(type === 'chat' ? 'novel.chat.title' : type === 'ai' ? 'novel.fullDraft' : 'novel.sources.import') }}</button>
       </div>
-      <label v-if="sourceType === 'ai'">
-        {{ t('novel.brief') }}
-        <textarea v-model="brief" class="textarea" rows="5" maxlength="8000" required
-          :placeholder="t('novel.briefPlaceholder')" />
+      <label v-if="sourceType !== 'import'">
+        {{ t(sourceType === 'chat' ? 'novel.chat.message' : 'novel.brief') }}
+        <textarea v-model="brief" class="textarea" rows="5" maxlength="8000" :readonly="busy" required
+          :placeholder="t(sourceType === 'chat' ? 'novel.chat.placeholder' : 'novel.briefPlaceholder')" />
       </label>
       <template v-else>
         <label>
@@ -32,46 +32,51 @@
         </label>
         <p v-if="sourceTooLarge" role="alert" class="dim">{{ t('novel.errors.source_too_large') }}</p>
       </template>
-      <div v-if="sourceType === 'ai'" class="novel-fields">
-        <label>
+      <div v-if="sourceType !== 'import'" class="novel-fields">
+        <label v-if="sourceType === 'ai'">
           {{ t('novel.totalLength') }}
           <input v-model.number="targetLength" class="input" type="number" min="500" max="500000" required />
         </label>
         <ModelSelect v-if="modelOptions.length" v-model="selectedModel" :label="t('novel.model')"
           :options="modelOptions" :default-label="modelOptions[0].label" />
       </div>
-      <p v-if="sourceType === 'ai' && modelsLoaded && !modelOptions.length" class="dim">{{ t('novel.errors.model_unavailable') }}</p>
-      <div v-if="sourceType === 'ai' && modelsLoadFailed" class="novel-actions">
+      <p v-if="sourceType !== 'import' && modelsLoaded && !modelOptions.length" class="dim">{{ t('novel.errors.model_unavailable') }}</p>
+      <div v-if="sourceType !== 'import' && modelsLoadFailed" class="novel-actions">
         <span role="status" class="dim">{{ t('novel.errors.models_load_failed') }}</span>
         <button type="button" class="btn" :disabled="modelsLoading" @click="loadModels">
           {{ t('novel.reloadModels') }}
         </button>
       </div>
       <div class="novel-actions">
-        <button class="btn btn-primary" :disabled="busy || !hasInput || (sourceType === 'ai' && (!!runningJob || !modelOptions.length))">
-          {{ t(sourceType === 'import' ? 'novel.saveDraft' : 'novel.generateDraft') }}
+        <button class="btn btn-primary" :disabled="busy || !hasInput || (sourceType !== 'import' && !modelOptions.length)
+          || (sourceType === 'ai' && !!runningJob)">
+          {{ t(sourceType === 'chat' ? 'novel.chat.send' : sourceType === 'import' ? 'novel.saveDraft' : 'novel.generateDraft') }}
         </button>
       </div>
     </form>
 
     <section v-if="job && !creating" class="card novel-panel">
       <div class="novel-heading">
-        <h2 ref="previewHeading" tabindex="-1">{{ t(versions.length ? 'novel.preview' : 'novel.prepare') }}</h2>
+        <h2 ref="previewHeading" tabindex="-1">{{ t(canChat ? 'novel.chat.title' : versions.length ? 'novel.preview' : 'novel.prepare') }}</h2>
         <div class="novel-actions">
           <label v-if="jobs.length > 1">
             {{ t('novel.history') }}
             <BaseSelect v-model="selectedJob" :options="jobOptions" />
           </label>
-          <button v-if="!runningJob" class="btn btn-sm" type="button" @click="creating = true">{{ t('novel.newNovel') }}</button>
+          <button class="btn btn-sm" type="button" @click="newNovel">{{ t('novel.newNovel') }}</button>
         </div>
       </div>
-      <div v-if="job.status !== 'completed' || !publishedEpisodes.length" class="novel-actions">
+      <div v-if="(job.status !== 'completed' || !publishedEpisodes.length) && (job.status !== 'ready' || job.draft_count)" class="novel-actions">
         <span role="status">{{ t(`novel.states.${job.status === 'running' ? job.stage : job.status}`) }}
           <template v-if="progress"> · {{ progress.label }}</template></span>
       </div>
       <progress v-if="job.status === 'running'" class="novel-progress" :value="progress?.done"
         :max="progress?.total ?? 1" :aria-label="progress?.label ?? t(`novel.states.${job.stage}`)" />
       <p v-if="job.error_code" class="dim">{{ errorMessage(job.error_code) }}</p>
+      <NovelChatPanel v-if="job.workflow_mode === 'preview_first'" ref="chatPanel" :key="job.id" :drama-id="dramaId" :job-id="job.id"
+        :draft-revision="job.draft_revision" :editable="canChat" :model-options="modelOptions"
+        :default-model="job.config_id && job.model ? `${job.config_id}/${job.model}` : ''"
+        :models-loaded="modelsLoaded" :models-load-failed="modelsLoadFailed" @reload-models="loadModels" @applied="chatApplied" />
       <form v-if="canSplit" class="novel-split" @submit.prevent="split">
         <div class="novel-fields">
           <label>
@@ -80,7 +85,7 @@
           </label>
           <ModelSelect v-if="modelOptions.length" v-model="splitModel" :label="t('novel.model')"
             :options="modelOptions" :default-label="modelOptions[0].label" />
-          <button class="btn btn-primary" :disabled="busy || !!runningJob || !modelOptions.length">
+          <button class="btn btn-primary" :disabled="busy || !!runningJob || chatRunning || !modelOptions.length">
             {{ t('novel.splitNow') }}
           </button>
         </div>
@@ -107,7 +112,7 @@
               :max="job.target_length" required />
           </label>
         </template>
-        <button class="btn" :disabled="busy || !!runningJob">{{ t('novel.retry') }}</button>
+        <button class="btn" :disabled="busy || !!runningJob || chatRunning">{{ t('novel.retry') }}</button>
       </form>
       <div v-if="versions.length > 1" class="novel-tabs" role="group" :aria-label="t('novel.manuscripts')">
         <button v-for="version in versions" :key="version" class="btn" type="button"
@@ -153,7 +158,8 @@ import { useI18n } from 'vue-i18n'
 import { toast } from 'vue-sonner'
 import BaseSelect from '~/components/BaseSelect.vue'
 import ModelSelect from '~/components/ModelSelect.vue'
-import { aiConfigAPI, novelAPI } from '~/composables/useApi'
+import NovelChatPanel from '~/components/NovelChatPanel.vue'
+import { aiConfigAPI, novelAPI, novelRequestId } from '~/composables/useApi'
 import { collectModelOptions, resolveTextModelSelection } from '~/utils/text-model-selection'
 
 const props = defineProps({
@@ -163,7 +169,7 @@ const props = defineProps({
 const emit = defineEmits(['published', 'viewEpisodes'])
 const { t, te, locale } = useI18n()
 const MAX_SOURCE_BYTES = 5 * 1024 * 1024
-const sourceType = ref('ai')
+const sourceType = ref('chat')
 const sourceText = ref('')
 const fileLoading = ref(false)
 const brief = ref('')
@@ -173,6 +179,7 @@ const selectedModel = ref('')
 const splitModel = ref('')
 const creating = ref(false)
 const previewHeading = ref(null)
+const chatPanel = ref(null)
 const retryModel = ref('')
 const retryLength = ref(1000)
 const modelOptions = ref([])
@@ -203,6 +210,7 @@ let refreshSequence = 0
 
 const job = computed(() => jobs.value.find(item => item.id === selectedJob.value))
 const runningJob = computed(() => jobs.value.find(item => item.status === 'running'))
+const chatRunning = computed(() => chatPanel.value?.running ?? false)
 const jobOptions = computed(() => jobs.value.map(item => ({
   value: item.id,
   label: [new Date(item.created_at).toLocaleString(locale.value),
@@ -226,14 +234,17 @@ const publishedRange = computed(() => {
 const needsWriting = computed(() => job.value
   && (job.value.episode_count == null || job.value.completed_chapters < job.value.episode_count))
 const canReadNovel = computed(() => !!job.value && !needsWriting.value)
-const canSplit = computed(() => job.value?.workflow_mode === 'preview_first'
+const canChat = computed(() => job.value?.workflow_mode === 'preview_first'
+  && job.value.draft_done === job.value.draft_count
   && (job.value.status === 'ready' || (job.value.status === 'failed'
-    && job.value.error_code === 'manuscript_too_short' && job.value.episode_count > 1)))
+    && job.value.error_code === 'manuscript_too_short' && job.value.completed_chapters === 0)))
+const canSplit = computed(() => canChat.value && job.value.draft_count > 0
+  && (job.value.status === 'ready' || job.value.episode_count > 1))
 const splitCountMax = computed(() => job.value?.error_code === 'manuscript_too_short' ? job.value.episode_count - 1 : 100)
 const canChangeLength = computed(() => job.value?.source_type === 'legacy'
   || (job.value?.source_type === 'ai' && ['planning', 'writing'].includes(job.value.stage)))
 const sourceTooLarge = computed(() => new TextEncoder().encode(sourceText.value).length > MAX_SOURCE_BYTES)
-const hasInput = computed(() => sourceType.value === 'ai' ? !!brief.value.trim()
+const hasInput = computed(() => sourceType.value !== 'import' ? !!brief.value.trim()
   : !!sourceText.value.trim() && !sourceTooLarge.value && !fileLoading.value)
 const versions = computed(() => {
   const item = job.value
@@ -271,6 +282,7 @@ const progress = computed(() => {
 watch(selectedJob, () => {
   focusNextPart.value = false
   partNumber.value = 1
+  if (selectedJob.value !== null) localStorage.setItem(`musereel:novel:${props.dramaId}`, String(selectedJob.value))
 })
 
 function changePart(step) {
@@ -282,7 +294,7 @@ function pickVersion(version) {
   manuscriptError.value = false
   pinnedVersion.value = { jobId: selectedJob.value, version }
 }
-watch([selectedJob, readerVersion, partNumber, manuscriptAttempt], async ([id, version, part], _, onCleanup) => {
+watch([selectedJob, readerVersion, partNumber, manuscriptAttempt, () => job.value?.draft_revision], async ([id, version, part], _, onCleanup) => {
   let stale = false
   onCleanup(() => { stale = true })
   manuscript.value = null
@@ -341,7 +353,8 @@ watch(splitCountMax, max => {
 
 function errorMessage(code) {
   const key = `novel.errors.${code}`
-  return te(key) ? t(key) : t('novel.errors.load_failed')
+  const chatKey = `novel.chat.errors.${code}`
+  return t(te(key) ? key : te(chatKey) ? chatKey : 'novel.errors.load_failed')
 }
 
 async function refresh() {
@@ -352,7 +365,7 @@ async function refresh() {
     if (disposed || sequence !== refreshSequence) return
     const completed = new Set(jobs.value.filter(item => item.status === 'completed').map(item => item.id))
     jobs.value = next
-    selectedJob.value ??= (runningJob.value ?? next[0])?.id ?? null
+    if (!next.some(item => item.id === selectedJob.value)) selectedJob.value = (runningJob.value ?? next[0])?.id ?? null
     if (next.some(item => item.status === 'completed' && !completed.has(item.id))) emit('published')
     listError.value = false
     ready.value = true
@@ -417,33 +430,55 @@ async function submit(action, allowWhileRunning = false) {
 
 function start() {
   const imported = sourceType.value === 'import'
+  const chatting = sourceType.value === 'chat'
   const { model, configId } = resolveTextModelSelection(modelOptions.value, selectedModel.value)
   if ((!imported && !model) || !hasInput.value) return
-  const data = imported ? { source_type: 'import', source_text: sourceText.value }
-    : { source_type: 'ai', brief: brief.value.trim(), target_length: targetLength.value, model, config_id: configId }
+  const data = chatting ? { start_mode: 'chat', model, config_id: configId, message: brief.value.trim() }
+    : imported ? { workflow_mode: 'preview_first', source_type: 'import', source_text: sourceText.value }
+      : { workflow_mode: 'preview_first', source_type: 'ai', brief: brief.value.trim(),
+        target_length: targetLength.value, model, config_id: configId }
   const fingerprint = JSON.stringify(data)
   if (request?.fingerprint !== fingerprint) {
-    const id = Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join('')
-    request = { fingerprint, id }
+    request = { fingerprint, id: novelRequestId() }
   }
+  const id = request.id
   return submit(async () => {
-    const result = await novelAPI.create(props.dramaId, { ...data, workflow_mode: 'preview_first', request_id: request.id })
+    if (chatting) creating.value = true
+    const result = await novelAPI.create(props.dramaId, { ...data, request_id: id })
     request = null
     if (imported) sourceText.value = ''
     else brief.value = ''
     return result
-  }, imported)
+  }, imported || chatting)
+}
+
+function newNovel() {
+  sourceType.value = 'chat'
+  creating.value = true
+}
+
+function chatApplied(result) {
+  if (selectedJob.value !== result.job.id) return
+  jobs.value = jobs.value.map(item => item.id === result.job.id ? result.job : item)
+  if (result.part_number !== null) {
+    pinnedVersion.value = { jobId: result.job.id, version: 'draft' }
+    focusNextPart.value = true
+    partNumber.value = result.part_number
+    manuscriptAttempt.value++
+  }
+  void refresh()
 }
 
 function split() {
   const { model, configId } = resolveTextModelSelection(modelOptions.value, splitModel.value)
-  if (!canSplit.value || !model) return
+  if (!canSplit.value || chatRunning.value || !model) return
   return submit(() => novelAPI.split(props.dramaId, job.value.id, {
-    episode_count: episodeCount.value, model, config_id: configId,
+    episode_count: episodeCount.value, model, config_id: configId, draft_revision: job.value.draft_revision,
   }))
 }
 
 function retry() {
+  if (chatRunning.value) return
   const data = {}
   if (needsWriting.value) {
     if (canChangeLength.value && retryLength.value !== job.value.target_length) data.target_length = retryLength.value
@@ -473,6 +508,8 @@ async function loadModels() {
 }
 
 onMounted(() => {
+  const remembered = Number(localStorage.getItem(`musereel:novel:${props.dramaId}`))
+  if (Number.isSafeInteger(remembered) && remembered > 0) selectedJob.value = remembered
   void refresh()
   void loadModels()
 })

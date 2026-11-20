@@ -5,9 +5,11 @@ import { z } from 'zod'
 import { db, schema } from '../db/index.js'
 import { getActiveConfigId } from '../services/ai.js'
 import { getContentLanguage } from '../services/app-settings.js'
-import { createNovelLease, findNovelProject, jobFields, resolveNovelModel, runNovelJob } from '../services/novels.js'
+import { launchNovelChatTurn, novelChatMessage } from '../services/novel-chat.js'
+import { activeNovelChatTurnFilter, createNovelLease, findNovelProject, jobFields, resolveNovelModel, runNovelJob } from '../services/novels.js'
 import { splitManuscript } from '../services/novel-manuscript.js'
 import { badRequest, created, notFound, now, serverError, success } from '../utils/response.js'
+import novelChat from './novel-chat.js'
 
 const app = new Hono()
 app.onError((error, c) => {
@@ -15,7 +17,7 @@ app.onError((error, c) => {
   console.error('[novels]', c.req.method, c.req.path, error.name)
   return serverError(c)
 })
-const { novelJobs, novelChapters, novelManuscriptParts, episodes } = schema
+const { novelJobs, novelChapters, novelManuscriptParts, novelChatTurns, episodes } = schema
 const modelSelection = z.object({
   config_id: z.number().int().positive(),
   model: z.string().trim().min(1).max(256),
@@ -34,6 +36,7 @@ const prepareFields = requestFields.extend({ workflow_mode: z.literal('preview_f
 const brief = z.string().trim().min(1).max(8000)
 const sourceText = z.string().refine(value => !!value.trim())
 const startRequest = z.union([
+  requestFields.extend({ ...modelSelection.shape, start_mode: z.literal('chat'), message: novelChatMessage.optional() }),
   prepareFields.extend({
     ...modelSelection.shape, source_type: z.literal('ai'), brief, target_length: novelLength,
   }),
@@ -41,7 +44,7 @@ const startRequest = z.union([
   startFields.extend({ source_type: z.literal('ai').optional(), brief, target_length: targetLength }),
   startFields.extend({ source_type: z.literal('import'), source_text: sourceText }),
 ])
-const splitRequest = modelSelection.extend({ episode_count: episodeCount })
+const splitRequest = modelSelection.extend({ episode_count: episodeCount, draft_revision: z.number().int().nonnegative().optional() })
 const MAX_SOURCE_BYTES = 5 * 1024 * 1024
 const retryRequest = modelSelection.partial().extend({ target_length: novelLength.optional() })
   .refine(input => (input.config_id === undefined) === (input.model === undefined))
@@ -71,15 +74,16 @@ app.post('/', bodyLimit({
   const requestFilter = and(eq(novelJobs.dramaId, dramaId), eq(novelJobs.requestId, body.request_id))
   const existing = db.select(jobFields).from(novelJobs).where(requestFilter).get()
   if (existing) return success(c, existing)
-  if (body.source_type === 'import' && Buffer.byteLength(body.source_text) > MAX_SOURCE_BYTES) {
+  const chatting = 'start_mode' in body
+  const imported = !chatting && body.source_type === 'import'
+  if (imported && Buffer.byteLength(body.source_text) > MAX_SOURCE_BYTES) {
     return badRequest(c, 'source_too_large')
   }
-  const previewFirst = body.workflow_mode === 'preview_first'
-  const imported = body.source_type === 'import'
-  const importingDraft = previewFirst && imported
+  const previewFirst = chatting || body.workflow_mode === 'preview_first'
+  const savingDraft = chatting || (previewFirst && imported)
   const configId = 'config_id' in body ? body.config_id : null
   const model = 'model' in body ? body.model : null
-  if (!importingDraft && !resolveNovelModel(configId, model)) return badRequest(c, 'model_unavailable')
+  if ((!savingDraft || chatting) && !resolveNovelModel(configId, model)) return badRequest(c, 'model_unavailable')
   const [image, video] = previewFirst ? [null, null] : await Promise.all([
     getActiveConfigId('image'), getActiveConfigId('video'),
   ])
@@ -88,43 +92,49 @@ app.post('/', bodyLimit({
   if (!findNovelProject(dramaId)) return notFound(c)
 
   const timestamp = now()
-  const lease = importingDraft ? null : createNovelLease()
+  const lease = savingDraft ? null : createNovelLease()
   const drafts = imported ? splitManuscript(body.source_text) : []
-  const job = db.transaction(tx => {
+  const result = db.transaction(tx => {
     const inserted = tx.insert(novelJobs).values({
       dramaId,
       requestId: body.request_id,
-      brief: imported ? '' : body.brief,
-      workflowMode: body.workflow_mode,
-      sourceType: body.source_type ?? 'legacy',
+      brief: 'brief' in body ? body.brief : '',
+      workflowMode: previewFirst ? 'preview_first' : body.workflow_mode,
+      sourceType: chatting ? 'ai' : body.source_type ?? 'legacy',
       draftCount: drafts.length,
       draftDone: drafts.length,
       projectContext: JSON.stringify(project),
       configId,
       model,
       episodeCount: previewFirst ? null : body.episode_count,
-      targetLength: imported ? (previewFirst ? null : 1000) : body.target_length,
+      targetLength: 'target_length' in body ? body.target_length : (imported && !previewFirst ? 1000 : null),
       contentLanguage: body.content_language ?? getContentLanguage(),
       imageConfigId: image,
       videoConfigId: video,
-      status: importingDraft ? 'ready' : 'running',
+      status: savingDraft ? 'ready' : 'running',
       ...lease,
-      stage: importingDraft ? 'ready' : imported ? 'analyzing' : 'planning',
+      stage: savingDraft ? 'ready' : imported ? 'analyzing' : 'planning',
       createdAt: timestamp,
       updatedAt: timestamp,
     }).onConflictDoNothing().returning(jobFields).get()
-    if (inserted) {
-      for (const [index, draft] of drafts.entries()) {
-        tx.insert(novelManuscriptParts).values({ jobId: inserted.id, partNumber: index + 1, draft }).run()
-      }
+    if (!inserted) return null
+    for (const [index, draft] of drafts.entries()) {
+      tx.insert(novelManuscriptParts).values({ jobId: inserted.id, partNumber: index + 1, draft }).run()
     }
-    return inserted
+    if (!chatting || !body.message) return { job: inserted }
+    const chatLease = createNovelLease()
+    const { id } = tx.insert(novelChatTurns).values({ jobId: inserted.id, requestId: body.request_id,
+      message: body.message, configId: body.config_id, model: body.model, status: 'running', createdAt: timestamp, ...chatLease,
+    }).returning({ id: novelChatTurns.id }).get()
+    return { job: inserted, firstTurn: { id, runToken: chatLease.runToken } }
   }, { behavior: 'immediate' })
-  if (!job) {
+  if (!result) {
     const sameRequest = db.select(jobFields).from(novelJobs).where(requestFilter).get()
     if (sameRequest) return success(c, sameRequest)
     return c.json({ code: 409, message: 'job_running' }, 409)
   }
+  const { job, firstTurn } = result
+  if (firstTurn) launchNovelChatTurn(firstTurn.id, firstTurn.runToken)
   if (lease) launch(job.id, lease.runToken)
   return created(c, job)
 })
@@ -194,7 +204,7 @@ app.post('/:jobId/split', async c => {
   }
   const parsed = splitRequest.safeParse(await c.req.json().catch(() => null))
   if (!parsed.success) return badRequest(c, 'invalid_request')
-  const { config_id, model, episode_count } = parsed.data
+  const { config_id, model, episode_count, draft_revision = existing.draftRevision } = parsed.data
   if (!canStartSplit(existing)) return success(c, db.select(jobFields).from(novelJobs).where(filter).get())
   const [image, video] = await Promise.all([getActiveConfigId('image'), getActiveConfigId('video')])
   if (!findNovelProject(dramaId)) return notFound(c)
@@ -202,11 +212,14 @@ app.post('/:jobId/split', async c => {
     const current = tx.select().from(novelJobs).where(filter).get()
     if (!current) return {}
     if (!canStartSplit(current)) return { job: tx.select(jobFields).from(novelJobs).where(filter).get() }
+    if (current.draftRevision !== draft_revision) return { staleDraft: true }
     if (current.errorCode === 'manuscript_too_short' && current.episodeCount !== null
       && episode_count >= current.episodeCount) return { error: 'manuscript_too_short' }
     const running = tx.select({ id: novelJobs.id }).from(novelJobs)
       .where(and(eq(novelJobs.dramaId, dramaId), eq(novelJobs.status, 'running'))).get()
     if (running) return { conflict: true }
+    const runningChat = tx.select({ id: novelChatTurns.id }).from(novelChatTurns).where(activeNovelChatTurnFilter(id)).get()
+    if (runningChat) return { chatRunning: true }
     if (!resolveNovelModel(config_id, model)) return { error: 'model_unavailable' }
     if (!image) return { error: 'image_unavailable' }
     if (!video) return { error: 'video_unavailable' }
@@ -220,6 +233,8 @@ app.post('/:jobId/split', async c => {
     return { job, runToken: lease.runToken }
   }, { behavior: 'immediate' })
   if (result.conflict) return c.json({ code: 409, message: 'job_running' }, 409)
+  if (result.chatRunning) return c.json({ code: 409, message: 'chat_running' }, 409)
+  if (result.staleDraft) return c.json({ code: 409, message: 'draft_changed' }, 409)
   if (result.error) return badRequest(c, result.error)
   if (!result.job) return notFound(c)
   if (result.runToken) launch(id, result.runToken)
@@ -247,6 +262,8 @@ app.post('/:jobId/retry', async c => {
     const running = tx.select({ id: novelJobs.id }).from(novelJobs)
       .where(and(eq(novelJobs.dramaId, dramaId), eq(novelJobs.status, 'running'))).get()
     if (running) return { conflict: true }
+    const runningChat = tx.select({ id: novelChatTurns.id }).from(novelChatTurns).where(activeNovelChatTurnFilter(id)).get()
+    if (runningChat) return { chatRunning: true }
     const writing = current.episode_count === null || current.completed_chapters < current.episode_count
     const canChangeLength = current.target_length !== null && (current.source_type === 'legacy'
       || ['planning', 'writing'].includes(current.stage))
@@ -267,11 +284,14 @@ app.post('/:jobId/retry', async c => {
     return { job, runToken: lease.runToken }
   }, { behavior: 'immediate' })
   if (result.conflict) return c.json({ code: 409, message: 'job_running' }, 409)
+  if (result.chatRunning) return c.json({ code: 409, message: 'chat_running' }, 409)
   if (result.invalid) return badRequest(c, 'invalid_request')
   if (result.unavailable) return badRequest(c, 'model_unavailable')
   if (!result.job) return notFound(c)
   if (result.runToken) launch(id, result.runToken)
   return success(c, result.job)
 })
+
+app.route('/:jobId/chat/turns', novelChat)
 
 export default app

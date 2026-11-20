@@ -25,6 +25,7 @@ const novelJobColumns = `(
   source_type TEXT NOT NULL DEFAULT 'legacy',
   draft_count INTEGER NOT NULL DEFAULT 0,
   draft_done INTEGER NOT NULL DEFAULT 0,
+  draft_revision INTEGER NOT NULL DEFAULT 0,
   optimized_done INTEGER NOT NULL DEFAULT 0,
   story_plan TEXT,
   outline TEXT,
@@ -114,6 +115,26 @@ export const sqliteSchemaStatements = [
     analysis TEXT,
     PRIMARY KEY (job_id, part_number)
   )`,
+  `CREATE TABLE IF NOT EXISTS novel_chat_turns (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    job_id INTEGER NOT NULL,
+    request_id TEXT NOT NULL,
+    message TEXT NOT NULL,
+    config_id INTEGER NOT NULL,
+    model TEXT NOT NULL,
+    status TEXT NOT NULL,
+    assistant_text TEXT,
+    proposal TEXT,
+    applied_revision INTEGER,
+    error_code TEXT,
+    run_token TEXT,
+    lease_expires_at INTEGER,
+    applied_at TEXT,
+    created_at TEXT NOT NULL,
+    UNIQUE (job_id, request_id)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_novel_chat_history ON novel_chat_turns (job_id, id)`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_novel_chat_running ON novel_chat_turns (job_id) WHERE status = 'running'`,
 
   `CREATE TABLE IF NOT EXISTS characters (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -456,7 +477,12 @@ export function initSqliteSchema(sqlite: Database.Database) {
       sqlite.exec('ALTER TABLE episodes ADD COLUMN production_started_at TEXT')
     }
     const columns = sqlite.prepare('PRAGMA table_info(novel_jobs)').all() as { name: string }[]
-    if (columns.some(column => column.name === 'workflow_mode')) return
+    if (columns.some(column => column.name === 'workflow_mode')) {
+      if (!columns.some(column => column.name === 'draft_revision')) {
+        sqlite.exec('ALTER TABLE novel_jobs ADD COLUMN draft_revision INTEGER NOT NULL DEFAULT 0')
+      }
+      return
+    }
     // 旧任务原样迁入。显式分集前，原稿可以没有集数、分集模型和图视频配置。
     sqlite.exec(`CREATE TABLE novel_jobs_upgrade ${novelJobColumns}`)
     const previousNames = new Set(columns.map(column => column.name))

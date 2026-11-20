@@ -1,6 +1,6 @@
 import { Agent } from '@mastra/core/agent'
 import { randomUUID } from 'node:crypto'
-import { and, eq, gt, isNull, lte, or } from 'drizzle-orm'
+import { and, eq, gt, isNotNull, isNull, lte, or } from 'drizzle-orm'
 import { z } from 'zod'
 import { createTextModel } from '../agents/index.js'
 import { buildLanguageDirective } from '../agents/language.js'
@@ -13,7 +13,7 @@ import { getConfigById, parseConfigModels } from './ai.js'
 import { nextEpisodeNumber } from './episode-number.js'
 import { optimizeAndSplit } from './novel-manuscript.js'
 
-const { novelJobs, novelChapters, novelManuscriptParts, dramas, episodes, aiServiceConfigs } = schema
+const { novelJobs, novelChapters, novelManuscriptParts, novelChatTurns, dramas, episodes, aiServiceConfigs } = schema
 type Job = typeof novelJobs.$inferSelect
 type Generate = (prompt: string) => Promise<string>
 const shortText = (max: number) => z.string().max(max).refine(value => value.trim().length > 0)
@@ -29,7 +29,7 @@ const chapterResult = z.object({
 const PLAN_BATCH_SIZE = 10
 const LEASE_DURATION = 60_000
 const LEASE_CHECK_INTERVAL = 15_000
-const clearLease = { runToken: null, leaseExpiresAt: null }
+export const clearNovelLease = { runToken: null, leaseExpiresAt: null }
 
 export const jobFields = {
   id: novelJobs.id,
@@ -39,6 +39,7 @@ export const jobFields = {
   source_type: novelJobs.sourceType,
   draft_count: novelJobs.draftCount,
   draft_done: novelJobs.draftDone,
+  draft_revision: novelJobs.draftRevision,
   optimized_done: novelJobs.optimizedDone,
   model: novelJobs.model,
   config_id: novelJobs.configId,
@@ -67,12 +68,39 @@ export function createNovelLease() {
   return { runToken: randomUUID(), leaseExpiresAt: Date.now() + LEASE_DURATION }
 }
 
+export function maintainNovelLease(expiresAt: number, renew: (deadline: number) => boolean) {
+  const lease = new AbortController()
+  const heartbeat = setInterval(() => {
+    if (lease.signal.aborted) return
+    try {
+      const deadline = Date.now() + LEASE_DURATION
+      if (renew(deadline)) expiresAt = deadline
+      else lease.abort()
+    } catch {
+      if (Date.now() >= expiresAt) lease.abort()
+    }
+  }, LEASE_CHECK_INTERVAL).unref()
+  return { signal: lease.signal, stop: () => clearInterval(heartbeat) }
+}
+
+export function recoverExpiredNovelChatTurns(jobId?: number) {
+  db.update(novelChatTurns).set({ status: 'interrupted', errorCode: 'interrupted', ...clearNovelLease })
+    .where(and(jobId === undefined ? undefined : eq(novelChatTurns.jobId, jobId),
+      eq(novelChatTurns.status, 'running'), or(isNull(novelChatTurns.runToken),
+        isNull(novelChatTurns.leaseExpiresAt), lte(novelChatTurns.leaseExpiresAt, Date.now())))).run()
+}
+
+export function activeNovelChatTurnFilter(jobId: number) {
+  return and(eq(novelChatTurns.jobId, jobId), eq(novelChatTurns.status, 'running'),
+    isNotNull(novelChatTurns.runToken), gt(novelChatTurns.leaseExpiresAt, Date.now()))
+}
+
 export function recoverExpiredNovelJobs() {
   db.update(novelJobs).set({
     status: 'interrupted',
     errorCode: 'interrupted',
     updatedAt: now(),
-    ...clearLease,
+    ...clearNovelLease,
   }).where(and(eq(novelJobs.status, 'running'), or(
     isNull(novelJobs.runToken), isNull(novelJobs.leaseExpiresAt), lte(novelJobs.leaseExpiresAt, Date.now()),
   ))).run()
@@ -80,7 +108,10 @@ export function recoverExpiredNovelJobs() {
 
 export function startNovelRecovery() {
   const recover = () => {
-    try { recoverExpiredNovelJobs() } catch { console.warn('[novels] Could not recover expired jobs') }
+    try {
+      recoverExpiredNovelJobs()
+      recoverExpiredNovelChatTurns()
+    } catch { console.warn('[novels] Could not recover expired jobs or chat turns') }
   }
   recover()
   setInterval(recover, LEASE_CHECK_INTERVAL).unref()
@@ -151,7 +182,7 @@ function publish(job: Job, runToken: string) {
   const { episodeCount, imageConfigId, videoConfigId } = job
   if (!episodeCount || !imageConfigId || !videoConfigId) throw new NovelError('publish_failed')
   db.transaction(tx => {
-    const finished = tx.update(novelJobs).set({ status: 'completed', updatedAt: now(), ...clearLease })
+    const finished = tx.update(novelJobs).set({ status: 'completed', updatedAt: now(), ...clearNovelLease })
       .where(ownedJob(job.id, runToken)).run()
     if (finished.changes !== 1) throw new LeaseLost()
     const project = tx.select({ id: dramas.id }).from(dramas)
@@ -257,19 +288,8 @@ async function writeDraft(job: Job, generate: Generate, checkpoint: Parameters<t
 export async function runNovelJob(id: number, runToken: string) {
   const job = db.select().from(novelJobs).where(ownedJob(id, runToken)).get()
   if (!job || job.leaseExpiresAt === null) return
-  const lease = new AbortController()
-  let expiresAt = job.leaseExpiresAt
-  const heartbeat = setInterval(() => {
-    if (lease.signal.aborted) return
-    try {
-      const deadline = Date.now() + LEASE_DURATION
-      const renewed = db.update(novelJobs).set({ leaseExpiresAt: deadline }).where(ownedJob(id, runToken)).run()
-      if (renewed.changes === 1) expiresAt = deadline
-      else lease.abort()
-    } catch {
-      if (Date.now() >= expiresAt) lease.abort()
-    }
-  }, LEASE_CHECK_INTERVAL).unref()
+  const lease = maintainNovelLease(job.leaseExpiresAt, deadline =>
+    db.update(novelJobs).set({ leaseExpiresAt: deadline }).where(ownedJob(id, runToken)).run().changes === 1)
   let stage = job.stage
   const checkpoint: Parameters<typeof optimizeAndSplit>[4] = (values, write) => {
     db.transaction(tx => {
@@ -287,7 +307,7 @@ export async function runNovelJob(id: number, runToken: string) {
         const generate = await makeGenerator(job, lease.signal, 'novel_writer')
         await writeDraft(job, generate, checkpoint)
       }
-      updateJob(id, runToken, { status: 'ready', stage: 'ready', ...clearLease })
+      updateJob(id, runToken, { status: 'ready', stage: 'ready', ...clearNovelLease })
       return
     }
     const episodeCount = job.episodeCount
@@ -311,11 +331,11 @@ export async function runNovelJob(id: number, runToken: string) {
     const code = error instanceof NovelError ? error.message
       : stage === 'publishing' ? 'publish_failed' : 'generation_failed'
     try {
-      updateJob(id, runToken, { status: 'failed', errorCode: code, ...clearLease })
+      updateJob(id, runToken, { status: 'failed', errorCode: code, ...clearNovelLease })
     } catch (persistError) {
       if (!(persistError instanceof LeaseLost)) throw persistError
     }
   } finally {
-    clearInterval(heartbeat)
+    lease.stop()
   }
 }

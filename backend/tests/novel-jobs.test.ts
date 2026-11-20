@@ -37,6 +37,11 @@ test('existing automatic novel jobs keep their checkpoints through the preview-f
       status, stage, source_type, workflow_mode, created_at, updated_at)
       VALUES (1, 'new', '', '{}', 'zh', 'ready', 'ready', 'import', 'preview_first', 'before', 'after')`)
       .run().lastInsertRowid, 42)
+    sqlite.exec('ALTER TABLE novel_jobs DROP COLUMN draft_revision')
+    initSqliteSchema(sqlite)
+    assert.deepEqual(sqlite.prepare('SELECT status, draft_revision FROM novel_jobs WHERE id = 42').get(), {
+      status: 'ready', draft_revision: 0,
+    })
   } finally {
     sqlite.close()
   }

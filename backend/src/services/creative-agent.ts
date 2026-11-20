@@ -8,6 +8,7 @@ import { buildLanguageDirective } from '../agents/language.js'
 import { loadAgentPromptFile } from '../agents/prompts.js'
 import { loadAgentSkills } from '../agents/skills.js'
 import { db, schema } from '../db/index.js'
+import { now } from '../utils/response.js'
 import { clearNovelLease, maintainNovelLease, resolveNovelModel } from './novels.js'
 import { activeProject, type ScriptTransaction } from './project-scripts.js'
 
@@ -17,18 +18,19 @@ const authority = z.object({ allowed: z.boolean() })
 class PreviouslySaved extends Error {}
 
 export const creativeTurnFields = {
-  id: turns.id, session_id: turns.sessionId, message: turns.message, references: turns.references,
+  id: turns.id, session_id: turns.sessionId, resume_from_id: turns.resumeFromId, message: turns.message, references: turns.references,
   status: turns.status, assistant_text: turns.assistantText, error_code: turns.errorCode,
   config_id: turns.configId, model: turns.model, created_at: turns.createdAt,
 }
 
-export const creativeEventFields = { seq: events.seq, turn_id: events.turnId, kind: events.kind, payload: events.payload }
+export const creativeEventFields = { seq: events.seq, turn_id: events.turnId, kind: events.kind, payload: events.payload,
+  created_at: events.createdAt }
 export const changeFields = { id: changes.id, kind: changes.kind, episode_id: changes.episodeId,
   episode_number: changes.episodeNumber, novel_id: changes.novelId, part_number: changes.partNumber,
   title: changes.title, scene: changes.scene, revision: changes.revision }
 
 function event(tx: ScriptTransaction | typeof db, turnId: number, kind: string, payload: Record<string, unknown>) {
-  tx.insert(events).values({ turnId, kind, payload }).run()
+  tx.insert(events).values({ turnId, kind, payload, createdAt: now() }).run()
 }
 
 function terminal(tx: ScriptTransaction, filter: ReturnType<typeof and>, id: number, status: string, errorCode: string | null) {

@@ -31,7 +31,8 @@
       </template>
       <pre v-else class="inspector-script">{{ format(script) || t('creativeAgent.emptyScript') }}</pre>
     </div>
-    <button type="button" class="inspector-link" @click="$emit('openScript', resource.change.episode_id)">
+    <button v-if="resource.change.kind !== 'novel'" type="button" class="inspector-link"
+      @click="$emit('openScript', resource.change.episode_id)">
       {{ t('creativeAgent.openEditor') }} <ArrowUpRight :size="14" />
     </button>
   </aside>
@@ -55,7 +56,9 @@ const failed = ref(false)
 let sequence = 0
 
 function changeTitle(item: CreativeChange) {
-  return item.kind === 'outline' ? t('projectScript.outline') : `${t('projectScript.episode', { n: item.episode_number })} · ${item.title}`
+  if (item.kind === 'outline') return t('projectScript.outline')
+  if (item.kind === 'novel') return t('creativeAgent.novelChange', { title: item.title })
+  return `${t('projectScript.episode', { n: item.episode_number })} · ${item.title}`
 }
 function select(event: Event) {
   const id = Number((event.target as HTMLSelectElement).value)
@@ -75,9 +78,12 @@ async function load() {
   loading.value = true
   failed.value = false
   try {
-    if (view.value === 'changes') {
+    if (view.value === 'changes' || selected.change.kind === 'novel') {
       const result = await creativeAPI.change(props.projectId, selected.turnId, selected.change.id)
-      if (current === sequence) change.value = result
+      if (current === sequence) {
+        change.value = result
+        if (view.value === 'script') script.value = result.after
+      }
     } else {
       const episode = selected.change.episode_id
       const result = episode === null ? await projectScriptAPI.get(props.projectId) : await projectScriptAPI.episode(props.projectId, episode)

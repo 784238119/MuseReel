@@ -22,6 +22,9 @@ test('existing automatic novel jobs keep their checkpoints through the preview-f
       before_text TEXT, after_text TEXT NOT NULL, base_revision TEXT, revision TEXT NOT NULL,
       UNIQUE (turn_id, call_id)
     )`)
+    sqlite.exec(`CREATE TABLE creative_events (
+      seq INTEGER PRIMARY KEY AUTOINCREMENT, turn_id INTEGER NOT NULL, kind TEXT NOT NULL, payload TEXT NOT NULL
+    )`)
     sqlite.exec(`CREATE TABLE novel_jobs (
       id INTEGER PRIMARY KEY AUTOINCREMENT, drama_id INTEGER NOT NULL, request_id TEXT NOT NULL,
       brief TEXT NOT NULL, project_context TEXT NOT NULL, episode_count INTEGER NOT NULL,
@@ -39,6 +42,8 @@ test('existing automatic novel jobs keep their checkpoints through the preview-f
       .some(column => column.name === 'novel_id'))
     assert.ok((sqlite.prepare('PRAGMA table_info(creative_changes)').all() as { name: string }[])
       .some(column => column.name === 'part_number'))
+    assert.ok((sqlite.prepare('PRAGMA table_info(creative_events)').all() as { name: string }[])
+      .some(column => column.name === 'created_at'))
     assert.deepEqual(sqlite.prepare(`SELECT id, workflow_mode, status, episode_count, draft_done, completed_chapters
       FROM novel_jobs WHERE id = 41`).get(), {
       id: 41, workflow_mode: 'automatic', status: 'completed', episode_count: 2, draft_done: 1, completed_chapters: 2,

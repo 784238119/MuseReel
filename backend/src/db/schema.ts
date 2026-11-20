@@ -112,6 +112,7 @@ export const creativeEvents = sqliteTable('creative_events', {
   turnId: integer('turn_id').notNull(),
   kind: text('kind').notNull(),
   payload: text('payload', { mode: 'json' }).$type<Record<string, unknown>>().notNull(),
+  createdAt: text('created_at'),
 })
 
 export const creativeChanges = sqliteTable('creative_changes', {

@@ -839,10 +839,7 @@ const agentDefs = computed(() => [
   { type: 'extractor', label: t('settings.agents.extractor'), icon: '🔍' },
   { type: 'storyboard_breaker', label: t('settings.agents.storyboardBreaker'), icon: '🎬' },
   { type: 'prompt_generator', label: t('settings.agents.promptGenerator'), icon: '🖼' },
-  { type: 'novel_writer', label: t('novel.title'), icon: '📖' },
-  { type: 'novel_writer_chat', label: t('novel.chat.title'), icon: '📖' },
   { type: 'creative_agent', label: t('creativeAgent.title'), icon: '📖' },
-  { type: 'novel_splitter', label: t('novel.splitAgent'), icon: '📑' },
 ])
 
 function getAgentCfg(type) {

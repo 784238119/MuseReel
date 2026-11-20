@@ -54,7 +54,7 @@
                     <summary>
                       <component :is="block.change || isWrite(block.tool) ? FilePenLine : BookOpen" :size="17" />
                       <Circle :size="9" class="tool-marker" aria-hidden="true" />
-                      <span class="tool-label">{{ toolLabel(block.tool, block.target?.episode_number) }}</span>
+                      <span class="tool-label">{{ toolLabel(block.tool, block.target?.episode_number ?? block.target?.part_number) }}</span>
                       <ChevronDown :size="14" class="tool-chevron" />
                       <span class="tool-state" :class="block.state">
                         <CircleCheck v-if="block.state === 'completed'" :size="17" />
@@ -197,7 +197,7 @@ function errorLabel(code: string) {
   const script = `projectScript.errors.${code}`
   return t(te(own) ? own : te(script) ? script : te(novel) ? novel : 'creativeAgent.errors.load_failed')
 }
-function isWrite(tool: string) { return /^(save|edit|create)_/.test(tool) }
+function isWrite(tool: string) { return /^(save|edit|create|append|replace|split)_/.test(tool) }
 function toolLabel(tool: string, number?: number) {
   const key = `creativeAgent.tools.${tool}${number && tool.includes('episode') ? '_number' : ''}`
   return t(te(key) ? key : `creativeAgent.tools.${tool}`, { n: number })
@@ -218,7 +218,9 @@ function referenceLabel(item: Reference) {
     : t('creativeAgent.episodeReference', { n: item.id })
 }
 function resultLabel(item: CreativeChange) {
-  return item.kind === 'outline' ? t('creativeAgent.viewOutline') : t('creativeAgent.viewEpisode', { n: item.episode_number })
+  if (item.kind === 'outline') return t('creativeAgent.viewOutline')
+  if (item.kind === 'novel') return t('creativeAgent.viewNovel')
+  return t('creativeAgent.viewEpisode', { n: item.episode_number })
 }
 function changesFor(turnId: number) {
   return (timelines.value.get(turnId) ?? []).flatMap(block => block.kind === 'tool' && block.change ? [{ turnId, change: block.change }] : [])

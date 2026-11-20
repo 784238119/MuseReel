@@ -30,6 +30,7 @@ test('project creative chat streams real reads and writes, resumes context and r
   let releaseBlocked!: () => void
   const blocked = new Promise<void>(resolve => { releaseBlocked = resolve })
   let episode2 = 0
+  let novelId = 0
   let baseVersion = ''
   const readRevision = () => db.select({ revision: schema.episodes.updatedAt }).from(schema.episodes)
     .where(eq(schema.episodes.id, episode2)).get()!.revision
@@ -93,6 +94,20 @@ test('project creative chat streams real reads and writes, resumes context and r
       } else if (message === '保存制作中的第 2 集。') {
         if (!phase) edit(readRevision(), '沈青：你也听见了。', '不应修改已锁定的剧本。')
         else text('第 2 集已进入制作。')
+      } else if (message === '新建小说并保存第一章。') {
+        if (phase === 0) tool('create_novel', { title: '潮汐档案', premise: '灯塔看守追查失踪货轮。' })
+        else if (phase === 1) {
+          novelId = db.select({ id: schema.novelJobs.id }).from(schema.novelJobs)
+            .where(eq(schema.novelJobs.dramaId, project)).get()!.id
+          tool('save_novel_plan', { novel_id: novelId, base_revision: 1, plan: '林舟追查失踪货轮，港口证词互相矛盾。' })
+        } else if (phase === 2) {
+          tool('append_novel_part', { novel_id: novelId, base_revision: 2, part_number: 1, title: '午夜灯塔',
+            content: '林舟在午夜走进灯塔。\n\n值班簿写着：港口所有人把它藏了起来。', summary: '林舟发现港口隐瞒失踪货轮。' })
+        } else if (phase === 3) {
+          tool('replace_novel_text', { novel_id: novelId, base_revision: 3, part_number: 1,
+            original_text: '港口所有人把它藏了起来', content: '港口董事会把它藏了起来',
+            summary: '林舟发现港口董事会隐瞒失踪货轮。' })
+        } else text('小说第一章已经保存。')
       } else if (message === '测试停止。') {
         await blocked
         text('迟到的回复。')
@@ -197,4 +212,16 @@ test('project creative chat streams real reads and writes, resumes context and r
   const history = await request(`${root}/sessions/${sessionId}/turns`)
   assert.equal(history.data.turns.length, 9)
   assert.equal(history.data.events.filter((event: { payload: { change?: object } }) => event.payload.change).length, 5)
+  const novelRun = await run(11, '新建小说并保存第一章。')
+  assert.equal(novelRun.events.at(-1).payload.status, 'completed')
+  assert.deepEqual(novelRun.events.filter(event => event.kind === 'tool_started').map(event => event.payload.tool),
+    ['create_novel', 'save_novel_plan', 'append_novel_part', 'replace_novel_text'])
+  assert.equal(novelRun.events.filter(event => event.payload.change?.kind === 'novel').length, 4)
+  const firstNovelChange = novelRun.events.find(event => event.payload.change?.kind === 'novel').payload.change
+  assert.equal((await request(`${root}/turns/${novelRun.id}/changes/${firstNovelChange.id}`)).data.novel_id, novelId)
+  const novel = db.select().from(schema.novelJobs).where(eq(schema.novelJobs.id, novelId)).get()!
+  assert.equal(novel.draftRevision, 4)
+  assert.match(novel.storyPlan!, /港口证词/)
+  assert.match(db.select().from(schema.novelManuscriptParts)
+    .where(eq(schema.novelManuscriptParts.jobId, novelId)).get()!.draft, /港口董事会/)
 })

@@ -113,7 +113,8 @@ export const sqliteSchemaStatements = [
   `CREATE INDEX IF NOT EXISTS idx_creative_events_turn ON creative_events (turn_id, seq)`,
   `CREATE TABLE IF NOT EXISTS creative_changes (
     id INTEGER PRIMARY KEY AUTOINCREMENT, turn_id INTEGER NOT NULL, call_id TEXT NOT NULL,
-    kind TEXT NOT NULL, episode_id INTEGER, episode_number INTEGER, title TEXT NOT NULL, scene TEXT,
+    kind TEXT NOT NULL, episode_id INTEGER, episode_number INTEGER, novel_id INTEGER, part_number INTEGER,
+    title TEXT NOT NULL, scene TEXT,
     before_text TEXT, after_text TEXT NOT NULL, base_revision TEXT, revision TEXT NOT NULL, UNIQUE (turn_id, call_id)
   )`,
   `CREATE TABLE IF NOT EXISTS novel_jobs ${novelJobColumns}`,
@@ -493,6 +494,14 @@ export function initSqliteSchema(sqlite: Database.Database) {
     sqlite.exec(statement)
   }
   sqlite.transaction(() => {
+    const creativeChangeColumns = new Set((sqlite.prepare('PRAGMA table_info(creative_changes)').all() as { name: string }[])
+      .map(column => column.name))
+    if (!creativeChangeColumns.has('novel_id')) {
+      sqlite.exec('ALTER TABLE creative_changes ADD COLUMN novel_id INTEGER')
+    }
+    if (!creativeChangeColumns.has('part_number')) {
+      sqlite.exec('ALTER TABLE creative_changes ADD COLUMN part_number INTEGER')
+    }
     const episodeColumns = sqlite.prepare('PRAGMA table_info(episodes)').all() as { name: string }[]
     if (!episodeColumns.some(column => column.name === 'production_started_at')) {
       sqlite.exec('ALTER TABLE episodes ADD COLUMN production_started_at TEXT')

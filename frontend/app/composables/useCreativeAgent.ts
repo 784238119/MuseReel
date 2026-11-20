@@ -1,9 +1,15 @@
 import { api, novelRequestId } from '~/composables/useApi'
 
 export type CreativeReference = { kind: 'episode' | 'novel' | 'source'; id?: number; scene?: string }
-export type CreativeSession = { id: number; title: string; updated_at: string }
+export type CreativeSession = {
+  id: number; title: string; updated_at: string; active_turn_id?: number | null;
+  last_status?: CreativeTurn['status'] | null; last_model?: string | null; last_config_id?: number | null;
+  last_error_code?: string | null;
+  last_activity_at?: string | null;
+}
 export type CreativeTurn = {
-  id: number; session_id: number; message: string; references: CreativeReference[]; model: string;
+  id: number; session_id: number; resume_from_id: number | null; message: string; references: CreativeReference[];
+  config_id: number; model: string; created_at: string;
   status: 'running' | 'completed' | 'partial' | 'failed' | 'interrupted' | 'stopped'; assistant_text: string; error_code: string | null;
 }
 export type CreativeChange = {
@@ -12,12 +18,13 @@ export type CreativeChange = {
   title: string; scene: string | null; revision: string;
 }
 export type CreativeEvent = {
-  seq: number; turn_id: number; kind: 'text' | 'tool_started' | 'tool_finished' | 'finished';
+  seq: number; turn_id: number; created_at: string | null; kind: 'text' | 'tool_started' | 'tool_finished' | 'finished';
   payload: { text?: string; call_id?: string; tool?: string; status?: CreativeTurn['status']; error?: string | null;
     target?: { episode_id?: number; episode_number?: number; novel_id?: number; part_number?: number;
       job_status?: string; scene?: string }; change?: CreativeChange };
 }
 type ToolRow = { kind: 'tool'; seq: number; call: string; tool: string; target?: CreativeEvent['payload']['target'];
+  startedAt?: string | null; endedAt?: string | null; durationMs?: number | null;
   state: 'running' | 'completed' | 'failed'; error?: string | null; change?: CreativeChange }
 type Block = ToolRow | { kind: 'text'; seq: number; text: string }
 
@@ -72,7 +79,7 @@ export function useCreativeAgent(projectId: number, onSaved: () => void) {
       }
       if (event.kind === 'tool_started' && payload.call_id && payload.tool) {
         const row: ToolRow = { kind: 'tool', seq: event.seq, call: payload.call_id, tool: payload.tool,
-          state: 'running', target: payload.target }
+          state: 'running', target: payload.target, startedAt: event.created_at }
         list.push(row)
         tools.set(`${event.turn_id}/${payload.call_id}`, row)
       }
@@ -83,6 +90,8 @@ export function useCreativeAgent(projectId: number, onSaved: () => void) {
           row.error = payload.error
           row.change = payload.change
           row.target = { ...row.target, ...payload.target }
+          row.endedAt = event.created_at
+          if (row.startedAt && event.created_at) row.durationMs = Math.max(0, Date.parse(event.created_at) - Date.parse(row.startedAt))
         }
       }
     }
@@ -162,13 +171,13 @@ export function useCreativeAgent(projectId: number, onSaved: () => void) {
         merge([turn], [])
       }
       if (!disposed) void loadSessions().catch(() => {})
-      return true
+      return turn
     } catch (e) {
       if (!disposed && version === selection) {
         error.value = errorCode(e)
         if (error.value === 'chat_running' && selected.value !== null) void loadTurns(selected.value).catch(() => {})
       }
-      return false
+      return null
     } finally { sending.value = false }
   }
 
@@ -229,7 +238,7 @@ export function useCreativeAgent(projectId: number, onSaved: () => void) {
   }
 
   onBeforeUnmount(() => { disposed = true; stream?.close(); clearTimeout(streamTimer); selection++ })
-  return { sessions, nextSession, selected, turns, beforeId, loading, sending, stopping, error, connected,
+  return { sessions, nextSession, selected, turns, events, beforeId, loading, sending, stopping, error, connected,
     running, timelines, loadSessions, selectSession, send, stop, rename, initialize,
     loadEarlier: async () => { if (selected.value !== null && beforeId.value !== null) await loadTurns(selected.value, true) } }
 }

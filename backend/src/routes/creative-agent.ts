@@ -54,10 +54,22 @@ app.get('/sessions', c => {
   const all = db.select(sessionFields).from(sessions).where(eq(sessions.dramaId, projectId))
     .orderBy(desc(sessions.updatedAt), desc(sessions.id)).offset(start.data).limit(pageSize + 1).all()
   const page = all.slice(0, pageSize)
-  const active = page.length ? db.select({ id: turns.id, sessionId: turns.sessionId }).from(turns)
-    .where(and(eq(turns.status, 'running'), inArray(turns.sessionId, page.map(session => session.id)))).all() : []
-  const activeBySession = new Map(active.map(turn => [turn.sessionId, turn.id]))
-  return success(c, { sessions: page.map(session => ({ ...session, active_turn_id: activeBySession.get(session.id) ?? null })),
+  const recent = page.length ? db.select({ id: turns.id, sessionId: turns.sessionId, status: turns.status,
+    errorCode: turns.errorCode, model: turns.model, configId: turns.configId, createdAt: turns.createdAt }).from(turns)
+    .where(inArray(turns.sessionId, page.map(session => session.id))).orderBy(desc(turns.id)).all() : []
+  const latestBySession = new Map<number, (typeof recent)[number]>()
+  const activeBySession = new Map<number, number>()
+  for (const turn of recent) {
+    if (!latestBySession.has(turn.sessionId)) latestBySession.set(turn.sessionId, turn)
+    if (turn.status === 'running' && !activeBySession.has(turn.sessionId)) activeBySession.set(turn.sessionId, turn.id)
+  }
+  return success(c, { sessions: page.map(session => {
+    const latest = latestBySession.get(session.id)
+    return { ...session, active_turn_id: activeBySession.get(session.id) ?? null,
+      last_status: latest?.status ?? null, last_model: latest?.model ?? null,
+      last_config_id: latest?.configId ?? null, last_error_code: latest?.errorCode ?? null,
+      last_activity_at: latest?.createdAt ?? null }
+  }),
     next_offset: all.length > pageSize ? start.data + pageSize : null })
 })
 

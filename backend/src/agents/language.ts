@@ -2,7 +2,7 @@
  * AI 内容语言指令块 — 按 RequestContext 中的目标语言生成，追加到 Agent instructions 末尾
  *
  * 设计要点：
- * - zh / 未设置时返回空串：默认行为与历史完全一致，零 token 开销
+ * - zh / 未设置时沿用默认语言，仅在需要保留导入原稿语言时追加指令
  * - 指令用英文书写（多语言模型遵循度最好），目标语言用原生名标注
  * - 必须自带「最高优先级」声明：桌面版已安装用户的 workspace 模板不会被覆盖
  *   （cpSync force:false），旧 SKILL.md 中的「只输出中文」约束只能靠这里的显式覆盖压制
@@ -14,8 +14,19 @@ const LANGUAGE_NATIVE_NAMES: Record<string, string> = {
   ko: '한국어 (Korean)',
 }
 
-export function buildLanguageDirective(lang?: string | null): string {
-  if (!lang || lang === 'zh') return ''
+const IMPORTED_MANUSCRIPT_LANGUAGE = [
+  'For propose_novel_edit replace or append proposals, the new prose (content and chapter title) MUST use the existing manuscript language.',
+  'Match the language of the target passage for replacements and the preceding chapter for continuations.',
+  'Copy original_text verbatim. Story plans and conversational replies may use the configured output language.',
+].join(' ')
+
+export function buildLanguageDirective(
+  lang?: string | null,
+  options: { preserveImportedManuscript?: boolean } = {},
+): string {
+  if (!lang || lang === 'zh') {
+    return options.preserveImportedManuscript ? `## Imported Manuscript Language (HIGHEST PRIORITY)\n\n${IMPORTED_MANUSCRIPT_LANGUAGE}` : ''
+  }
   const native = LANGUAGE_NATIVE_NAMES[lang] || lang
   return [
     '## Output Language (HIGHEST PRIORITY)',
@@ -28,5 +39,6 @@ export function buildLanguageDirective(lang?: string | null): string {
     '- When referencing EXISTING assets with @mentions (e.g. in video prompts), the name after @ must EXACTLY match the asset name as it appears in the provided asset lists — do NOT translate or rewrite existing asset names.',
     '- Character voice references (e.g. #Alex) are literal tokens: copy the complete voice_reference value exactly, including the existing name, regardless of output language. Do not add a suffix.',
     '- The visual style prefix of image prompts is injected automatically by the system (in English). Do not translate, rewrite, or duplicate it.',
+    ...(options.preserveImportedManuscript ? [`- ${IMPORTED_MANUSCRIPT_LANGUAGE}`] : []),
   ].join('\n')
 }

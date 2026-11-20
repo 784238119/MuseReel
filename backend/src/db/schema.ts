@@ -98,6 +98,7 @@ export const novelJobs = sqliteTable('novel_jobs', {
   sourceType: text('source_type').notNull().default('legacy'),
   draftCount: integer('draft_count').notNull().default(0),
   draftDone: integer('draft_done').notNull().default(0),
+  draftRevision: integer('draft_revision').notNull().default(0),
   optimizedDone: integer('optimized_done').notNull().default(0),
   storyPlan: text('story_plan'),
   outline: text('outline'),
@@ -126,6 +127,30 @@ export const novelManuscriptParts = sqliteTable('novel_manuscript_parts', {
   summary: text('summary'),
   analysis: text('analysis'),
 }, t => [primaryKey({ columns: [t.jobId, t.partNumber] })])
+
+export type NovelEditProposal = { base_revision: number; content: string } & (
+  { kind: 'plan' }
+  | { kind: 'append'; part_number: number; summary: string }
+  | { kind: 'replace'; part_number: number; original_text: string; summary: string }
+)
+
+export const novelChatTurns = sqliteTable('novel_chat_turns', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  jobId: integer('job_id').notNull(),
+  requestId: text('request_id').notNull(),
+  message: text('message').notNull(),
+  configId: integer('config_id').notNull(),
+  model: text('model').notNull(),
+  status: text('status').notNull(),
+  assistantText: text('assistant_text'),
+  proposal: text('proposal', { mode: 'json' }).$type<NovelEditProposal>(),
+  appliedRevision: integer('applied_revision'),
+  errorCode: text('error_code'),
+  runToken: text('run_token'),
+  leaseExpiresAt: integer('lease_expires_at'),
+  appliedAt: text('applied_at'),
+  createdAt: text('created_at').notNull(),
+})
 
 export const characters = sqliteTable('characters', {
   id: integer('id').primaryKey({ autoIncrement: true }),

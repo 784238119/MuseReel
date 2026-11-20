@@ -840,6 +840,7 @@ const agentDefs = computed(() => [
   { type: 'storyboard_breaker', label: t('settings.agents.storyboardBreaker'), icon: '🎬' },
   { type: 'prompt_generator', label: t('settings.agents.promptGenerator'), icon: '🖼' },
   { type: 'novel_writer', label: t('novel.title'), icon: '📖' },
+  { type: 'novel_writer_chat', label: t('novel.chat.title'), icon: '📖' },
   { type: 'novel_splitter', label: t('novel.splitAgent'), icon: '📑' },
 ])
 
@@ -968,7 +969,7 @@ async function setContentLanguage(lang) {
 onMounted(loadContentLanguage)
 
 // agent type 用下划线（script_rewriter），skill 目录按 Mastra 规范用连字符（script-rewriter）
-const skillDirOf = (type) => type.replace(/_/g, '-')
+const skillDirOf = (type) => type === 'novel_writer_chat' ? 'novel-writer' : type.replace(/_/g, '-')
 const skillBelongsTo = (skillId, type) => {
   const dir = skillDirOf(type)
   return skillId === dir || skillId.startsWith(dir + '/')

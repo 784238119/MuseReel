@@ -67,15 +67,53 @@ export const projectScriptAPI = {
   resolve: (dramaId: number, id: number, apply: boolean) => api.post(`/dramas/${dramaId}/script/jobs/${id}/resolve`, { apply }),
 }
 
+export type NovelChatProposal = { base_revision: number; content: string } & (
+  { kind: 'plan' }
+  | { kind: 'append'; part_number: number }
+  | { kind: 'replace'; part_number: number; original_text: string }
+)
+
+export interface NovelChatTurn {
+  id: number
+  message: string
+  status: 'running' | 'completed' | 'failed' | 'interrupted'
+  config_id: number
+  model: string
+  assistant_text: string | null
+  proposal: NovelChatProposal | null
+  applied_at: string | null
+  error_code: string | null
+}
+
+interface NovelChatHistory {
+  turns: NovelChatTurn[]
+  before_id: number | null
+  active_turn: NovelChatTurn | null
+  story_plan: string | null
+  draft_revision: number
+  applied_turns: { id: number; applied_at: string | null }[]
+}
+
+type NovelModel = { config_id: number; model: string }
+
+export function novelRequestId() {
+  return Array.from(crypto.getRandomValues(new Uint8Array(16)), byte => byte.toString(16).padStart(2, '0')).join('')
+}
+
+function novelChatPath(dramaId: number, jobId: number) {
+  return `/dramas/${dramaId}/novel-jobs/${jobId}/chat/turns`
+}
+
 export const novelAPI = {
   list: (dramaId: number) => api.get(`/dramas/${dramaId}/novel-jobs`),
   create: (dramaId: number, data: {
     request_id: string
-    workflow_mode: 'preview_first'
     content_language?: string
-  } & ({ source_type: 'ai'; brief: string; target_length: number; config_id: number; model: string }
-    | { source_type: 'import'; source_text: string })) => req('POST', `/dramas/${dramaId}/novel-jobs`, data, false),
-  split: (dramaId: number, id: number, data: { episode_count: number; config_id: number; model: string }) =>
+  } & (({ start_mode: 'chat'; message: string } & NovelModel)
+    | ({ workflow_mode: 'preview_first'; source_type: 'ai'; brief: string; target_length: number } & NovelModel)
+    | { workflow_mode: 'preview_first'; source_type: 'import'; source_text: string })) =>
+    req('POST', `/dramas/${dramaId}/novel-jobs`, data, false),
+  split: (dramaId: number, id: number, data: { episode_count: number; config_id: number; model: string; draft_revision?: number }) =>
     api.post(`/dramas/${dramaId}/novel-jobs/${id}/split`, data),
   get: (dramaId: number, id: number) => api.get(`/dramas/${dramaId}/novel-jobs/${id}`),
   chapter: (dramaId: number, id: number, number: number) =>
@@ -87,6 +125,19 @@ export const novelAPI = {
     model?: string
     target_length?: number
   }) => api.post(`/dramas/${dramaId}/novel-jobs/${id}/retry`, data),
+  chatTurns: (dramaId: number, jobId: number, options: { beforeId?: number; afterRevision?: number } = {}) => {
+    const query = new URLSearchParams()
+    if (options.beforeId !== undefined) query.set('before_id', String(options.beforeId))
+    if (options.afterRevision !== undefined) query.set('after_revision', String(options.afterRevision))
+    const path = novelChatPath(dramaId, jobId)
+    return api.get<NovelChatHistory>(query.size ? `${path}?${query}` : path)
+  },
+  sendTurn: (dramaId: number, jobId: number, data: { request_id: string; message: string } & Partial<NovelModel>) =>
+    req<NovelChatTurn>('POST', novelChatPath(dramaId, jobId), data, false),
+  retryTurn: (dramaId: number, jobId: number, id: number, data?: NovelModel) =>
+    api.post<NovelChatTurn>(`${novelChatPath(dramaId, jobId)}/${id}/retry`, data),
+  applyTurn: (dramaId: number, jobId: number, id: number) =>
+    api.post<{ turn: NovelChatTurn; job: any; part_number: number | null }>(`${novelChatPath(dramaId, jobId)}/${id}/apply`),
 }
 
 export const episodeAPI = {

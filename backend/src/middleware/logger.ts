@@ -23,6 +23,7 @@ function formatTime(): string {
 
 function isCreativeWrite(method: string, path: string) {
   return /^\/api\/v1\/dramas\/[^/]+\/script(?:\/|$)/.test(path)
+    || /^\/api\/v1\/dramas\/[^/]+\/novel-jobs\/[^/]+\/chat(?:\/|$)/.test(path)
     || (method === 'POST' && /^\/api\/v1\/dramas(?:\/script-import-preview|\/[^/]+\/novel-jobs)?\/?$/.test(path))
 }
 

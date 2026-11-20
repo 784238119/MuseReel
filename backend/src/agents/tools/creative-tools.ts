@@ -9,10 +9,11 @@ import { activeEpisode, activeProject, findBlockingScript, isScriptEditable, sav
 import { nextEpisodeNumber } from '../../services/episode-number.js'
 import { formattedScript, projectOutline } from '../../services/script-import.js'
 import { getActiveConfigId } from '../../services/ai.js'
+import { createNovelLease, runNovelJob } from '../../services/novels.js'
 import { now } from '../../utils/response.js'
 
 const { dramas, episodes, projectScripts, scriptJobs, novelJobs, novelManuscriptParts, novelChapters,
-  creativeTurns, creativeChanges } = schema
+  creativeTurns, creativeChanges, characters, scenes, props, storyboards } = schema
 const id = z.number().int().positive()
 const offset = z.number().int().nonnegative().optional()
 const sceneNumber = z.string().regex(/^S\d+$/i)
@@ -27,6 +28,9 @@ type Run = {
   projectId: number
   sessionId: number
   turnId: number
+  contentLanguage: string
+  configId: number
+  model: string
   authorized: (tool: string, target: Record<string, unknown>) => Promise<boolean>
   start: (tool: string, target: Record<string, unknown>, callId: string) => void
   finish: (callId: string, error?: string, target?: Record<string, unknown>) => void
@@ -44,17 +48,46 @@ function uploadedScript(projectId: number) {
     .orderBy(desc(scriptJobs.id)).get()?.content
 }
 
-const materialNovels = (projectId: number) => and(eq(novelJobs.dramaId, projectId), sql`(
-  (${novelJobs.draftCount} > 0 AND ${novelJobs.draftDone} = ${novelJobs.draftCount}) OR
-  (${novelJobs.sourceType} = 'legacy' AND ${novelJobs.episodeCount} > 0 AND ${novelJobs.completedChapters} = ${novelJobs.episodeCount}))`)
+function projectNovel(projectId: number, novelId?: number) {
+  return db.select().from(novelJobs).where(and(
+    eq(novelJobs.dramaId, projectId),
+    novelId === undefined ? undefined : eq(novelJobs.id, novelId),
+  )).orderBy(desc(novelJobs.id)).get()
+}
+
+function projectNovelInTx(tx: ScriptTransaction, projectId: number, novelId: number) {
+  return tx.select().from(novelJobs).where(and(eq(novelJobs.dramaId, projectId), eq(novelJobs.id, novelId))).get()
+}
+
+function novelPartInTx(tx: ScriptTransaction, novelId: number, partNumber: number) {
+  return tx.select().from(novelManuscriptParts).where(and(
+    eq(novelManuscriptParts.jobId, novelId),
+    eq(novelManuscriptParts.partNumber, partNumber),
+  )).get()
+}
+
+function replaceUnique(source: string, original: string, replacement: string) {
+  const first = source.indexOf(original)
+  if (first < 0 || source.indexOf(original, first + 1) >= 0) return null
+  return source.slice(0, first) + replacement + source.slice(first + original.length)
+}
+
+function novelLabel(job: typeof novelJobs.$inferSelect) {
+  return job.brief.split(/\r?\n/, 1)[0].slice(0, 120) || `小说 ${job.id}`
+}
+
+function canEditNovelDraft(job: typeof novelJobs.$inferSelect) {
+  return job.completedChapters === 0 && (job.status === 'ready' || job.status === 'failed')
+}
 
 export function creativeMaterials(projectId: number, afterEpisode = 0, query?: string) {
   const catalogue = db.select({ id: episodes.id, number: episodes.episodeNumber, title: episodes.title }).from(episodes)
     .where(and(eq(episodes.dramaId, projectId), isNull(episodes.deletedAt), gt(episodes.episodeNumber, afterEpisode),
       query ? sql`instr(lower(${episodes.title}), lower(${query})) > 0` : undefined))
     .orderBy(episodes.episodeNumber).limit(61).all()
-  const novels = db.select({ id: novelJobs.id, title: sql<string>`substr(${novelJobs.brief}, 1, 80)`, created_at: novelJobs.createdAt }).from(novelJobs)
-    .where(and(materialNovels(projectId), query ? sql`instr(lower(${novelJobs.brief}), lower(${query})) > 0` : undefined))
+  const novels = db.select({ id: novelJobs.id, title: sql<string>`substr(${novelJobs.brief}, 1, 80)`, status: novelJobs.status,
+    part_count: novelJobs.draftCount, revision: novelJobs.draftRevision, created_at: novelJobs.createdAt }).from(novelJobs)
+    .where(and(eq(novelJobs.dramaId, projectId), query ? sql`instr(lower(${novelJobs.brief}), lower(${query})) > 0` : undefined))
     .orderBy(desc(novelJobs.id)).limit(50).all()
   const source = db.select({ id: scriptJobs.id }).from(scriptJobs).where(and(eq(scriptJobs.dramaId, projectId),
     sql`json_type(${scriptJobs.payload}, '$.source') = 'text'`)).get()
@@ -67,7 +100,7 @@ export function creativeMaterials(projectId: number, afterEpisode = 0, query?: s
 export function creativeReferenceExists(projectId: number, reference: CreativeReference) {
   if (reference.kind === 'episode') return !!reference.id && !!db.transaction(tx => activeEpisode(tx, projectId, reference.id!))
   if (reference.kind === 'novel') return !!db.select({ id: novelJobs.id }).from(novelJobs)
-    .where(and(materialNovels(projectId), eq(novelJobs.id, reference.id ?? 0))).get()
+    .where(and(eq(novelJobs.dramaId, projectId), eq(novelJobs.id, reference.id ?? 0))).get()
   return !!uploadedScript(projectId)
 }
 
@@ -87,12 +120,17 @@ export function creativeTools(run: Run) {
     const key = callId ?? randomUUID()
     run.start(tool, target, key)
     const result = action()
-    run.finish(key, typeof result.error === 'string' ? result.error : undefined,
-      typeof result.episode_id === 'number' ? { episode_id: result.episode_id, episode_number: result.episode_number } : undefined)
+    run.finish(key, typeof result.error === 'string' ? result.error : undefined, {
+      ...target,
+      ...(typeof result.episode_id === 'number' ? { episode_id: result.episode_id, episode_number: result.episode_number } : {}),
+      ...(typeof result.novel_id === 'number' ? { novel_id: result.novel_id, part_number: result.part_number,
+        job_status: result.status } : {}),
+    })
     return result
   }
   async function write(tool: string, target: Record<string, unknown>, callId: string | undefined,
-    action: (tx: ScriptTransaction) => Change | { error: string }, prepare?: () => Promise<void>) {
+    action: (tx: ScriptTransaction) => Change | { error: string }, prepare?: () => Promise<void>,
+    afterCommit?: (result: ToolResult) => void) {
     const key = callId ?? randomUUID()
     run.start(tool, target, key)
     const allowed = await run.authorized(tool, target).catch(() => null)
@@ -104,8 +142,17 @@ export function creativeTools(run: Run) {
       run.finish(key, 'write_not_requested')
       return { error: 'write_not_requested' }
     }
-    if (prepare) await prepare()
-    return run.commit(key, action)
+    try {
+      if (prepare) await prepare()
+      const result = run.commit(key, action)
+      if (!result.error && afterCommit) afterCommit(result)
+      return result
+    } catch (error) {
+      const code = error instanceof Error && ['image_unavailable', 'video_unavailable'].includes(error.message)
+        ? error.message : 'save_failed'
+      run.finish(key, code)
+      return { error: code }
+    }
   }
 
   return {
@@ -122,6 +169,42 @@ export function creativeTools(run: Run) {
         const row = db.select().from(projectScripts).where(eq(projectScripts.dramaId, project)).get()
         return { outline: row ? JSON.parse(row.outline) : null, revision: row?.revision ?? 0 }
       }),
+    }),
+    read_project_assets: createTool({ id: 'read_project_assets',
+      description: 'Read concise project character, scene, prop, and storyboard context for continuity and script writing.',
+      inputSchema: z.object({ kind: z.enum(['characters', 'scenes', 'props', 'storyboards']),
+        episode_id: id.optional(), limit: z.number().int().min(1).max(100).default(60) }),
+      execute: ({ kind, episode_id, limit }, context) => read('read_project_assets', { kind, episode_id },
+        context?.agent?.toolCallId, () => {
+        const take = limit ?? 60
+        if (kind === 'characters') {
+          return { items: db.select({ id: characters.id, name: characters.name, role: characters.role,
+            description: characters.description, appearance: characters.appearance, styling: characters.styling,
+            image_url: characters.imageUrl }).from(characters).where(and(eq(characters.dramaId, project),
+            isNull(characters.deletedAt))).limit(take).all() }
+        }
+        if (kind === 'scenes') {
+          return { items: db.select({ id: scenes.id, episode_id: scenes.episodeId, location: scenes.location, time: scenes.time,
+            prompt: scenes.prompt, lighting: scenes.lighting, image_url: scenes.imageUrl }).from(scenes).where(and(
+            eq(scenes.dramaId, project), isNull(scenes.deletedAt))).limit(take).all() }
+        }
+        if (kind === 'props') {
+          return { items: db.select({ id: props.id, name: props.name, type: props.type, description: props.description,
+            image_url: props.imageUrl }).from(props).where(and(eq(props.dramaId, project),
+            isNull(props.deletedAt))).limit(take).all() }
+        }
+        const episodeIds = db.select({ id: episodes.id }).from(episodes).where(and(
+          eq(episodes.dramaId, project), isNull(episodes.deletedAt),
+          episode_id === undefined ? undefined : eq(episodes.id, episode_id),
+        )).all()
+        if (!episodeIds.length) return { items: [] }
+        return { items: db.select({ id: storyboards.id, episode_id: storyboards.episodeId, number: storyboards.storyboardNumber,
+          title: storyboards.title, description: storyboards.description, duration: storyboards.duration,
+          status: storyboards.status }).from(storyboards).where(and(
+          inArray(storyboards.episodeId, episodeIds.map(episode => episode.id)),
+          isNull(storyboards.deletedAt),
+        )).limit(take).all() }
+        }),
     }),
     read_episode_script: createTool({ id: 'read_episode_script',
       description: 'Read the persisted episode script and revision by ID or episode number. Use scene, exact quote, offset, or tail to locate text.',
@@ -151,18 +234,67 @@ export function creativeTools(run: Run) {
         return source ? excerpt(source, input.offset ?? 0) : { error: 'not_found' }
       }),
     }),
-    read_novel_manuscript: createTool({ id: 'read_novel_manuscript', description: 'Read a part of a novel in this project.',
-      inputSchema: z.object({ novel_id: id, part_number: id, offset }),
+    read_novel_context: createTool({ id: 'read_novel_context',
+      description: 'Read a novel plan, continuity summary, part index, split status, and linked episodes before writing or splitting.',
+      inputSchema: z.object({ novel_id: id.optional(), after_part_number: offset }),
+      execute: (input, context) => read('read_novel_context', { novel_id: input.novel_id }, context?.agent?.toolCallId, () => {
+        const job = projectNovel(project, input.novel_id)
+        if (!job) return { error: 'not_found' }
+        const catalogue = db.select({ part_number: novelManuscriptParts.partNumber, summary: novelManuscriptParts.summary,
+          opening: sql<string>`substr(${novelManuscriptParts.draft}, 1, 180)` }).from(novelManuscriptParts)
+          .where(and(eq(novelManuscriptParts.jobId, job.id),
+            gt(novelManuscriptParts.partNumber, input.after_part_number ?? 0))).orderBy(novelManuscriptParts.partNumber).limit(30).all()
+        const chapters = db.select({ chapter_number: novelChapters.chapterNumber, title: novelChapters.title,
+          episode_id: novelChapters.episodeId }).from(novelChapters).where(eq(novelChapters.jobId, job.id))
+          .orderBy(novelChapters.chapterNumber).limit(100).all()
+        let outline: unknown = job.outline
+        if (job.outline) {
+          try { outline = JSON.parse(job.outline) } catch { outline = job.outline }
+        }
+        return { novel_id: job.id, title: novelLabel(job), brief: job.brief, story_plan: job.storyPlan, outline,
+          status: job.status, stage: job.stage, workflow_mode: job.workflowMode, part_count: job.draftCount,
+          draft_done: job.draftDone, draft_revision: job.draftRevision, optimized_done: job.optimizedDone,
+          episode_count: job.episodeCount, completed_chapters: job.completedChapters, error_code: job.errorCode,
+          catalogue, chapters, next_after_part_number: catalogue.length === 30 ? catalogue.at(-1)?.part_number ?? null : null }
+      }),
+    }),
+    read_novel_manuscript: createTool({ id: 'read_novel_manuscript',
+      description: 'Read a novel part by ID, exact quote, offset, or tail. Unfinished and completed project novels are supported.',
+      inputSchema: z.object({ novel_id: id.optional(), part_number: id.optional(),
+        quote: z.string().trim().min(1).max(400).optional(), offset, tail: z.boolean().optional() }),
       execute: (input, context) => read('read_novel_manuscript', { novel_id: input.novel_id, part_number: input.part_number },
         context?.agent?.toolCallId, () => {
-          const job = db.select().from(novelJobs).where(and(materialNovels(project), eq(novelJobs.id, input.novel_id))).get()
+          const job = projectNovel(project, input.novel_id)
           if (!job) return { error: 'not_found' }
-          const part = job.draftCount > 0 ? db.select({ content: novelManuscriptParts.draft }).from(novelManuscriptParts)
-            .where(and(eq(novelManuscriptParts.jobId, job.id), eq(novelManuscriptParts.partNumber, input.part_number))).get()
-            : db.select({ content: novelChapters.content }).from(novelChapters)
-              .where(and(eq(novelChapters.jobId, job.id), eq(novelChapters.chapterNumber, input.part_number))).get()
-          return part ? { part_number: input.part_number, part_count: job.draftCount || job.completedChapters,
-            ...excerpt(part.content, input.offset ?? 0) } : { error: 'not_found' }
+          const parts = db.select({ part_number: novelManuscriptParts.partNumber, content: novelManuscriptParts.draft }).from(novelManuscriptParts)
+            .where(eq(novelManuscriptParts.jobId, job.id)).orderBy(novelManuscriptParts.partNumber).all()
+          if (parts.length) {
+            let number = input.part_number
+            if (number === undefined && input.quote) {
+              const matching = parts.filter(part => part.content.includes(input.quote!)).map(part => part.part_number)
+              if (matching.length !== 1) return { novel_id: job.id, matching_parts: matching }
+              number = matching[0]
+            }
+            const part = parts.find(item => item.part_number === (number ?? parts.at(-1)!.part_number))
+            if (!part) return { error: 'part_not_found' }
+            const quoteAt = input.quote ? part.content.indexOf(input.quote) : -1
+            if (input.quote && quoteAt < 0) return { error: 'quote_not_found' }
+            if (input.quote && part.content.indexOf(input.quote, quoteAt + 1) >= 0) return { error: 'quote_ambiguous' }
+            const start = input.offset ?? (input.tail ? Math.max(0, part.content.length - excerptSize)
+              : input.quote ? Math.max(0, quoteAt - 800) : 0)
+            return { novel_id: job.id, title: novelLabel(job), status: job.status, draft_revision: job.draftRevision,
+              part_number: part.part_number, part_count: parts.length, ...excerpt(part.content, start) }
+          }
+          const chapters = db.select({ chapter_number: novelChapters.chapterNumber, title: novelChapters.title,
+            content: novelChapters.content }).from(novelChapters).where(eq(novelChapters.jobId, job.id))
+            .orderBy(novelChapters.chapterNumber).all()
+          const chapter = chapters.find(item => item.chapter_number === input.part_number)
+            ?? (input.quote ? chapters.find(item => item.content.includes(input.quote!)) : undefined)
+            ?? chapters.at(-1)
+          if (!chapter) return { error: 'not_found' }
+          const start = input.offset ?? (input.tail ? Math.max(0, chapter.content.length - excerptSize) : 0)
+          return { novel_id: job.id, title: chapter.title, status: job.status, part_number: chapter.chapter_number,
+            part_count: chapters.length, ...excerpt(chapter.content, start) }
         }),
     }),
     search_conversation: createTool({ id: 'search_conversation', description: 'Find earlier choices and text from this session by exact keyword.',
@@ -189,6 +321,143 @@ export function creativeTools(run: Run) {
         return result.error ? { error: result.error } : { kind: 'outline', title: '项目大纲', before: result.before,
           after: result.after, baseRevision: String(input.base_revision), revision: String(result.revision) }
       }),
+    }),
+    create_novel: createTool({ id: 'create_novel',
+      description: 'Create a project novel workspace for planning and chapter writing. Use one workspace per novel project.',
+      inputSchema: z.object({ title: z.string().trim().min(1).max(160), premise: z.string().trim().min(1).max(8000).optional() }),
+      execute: (input, context) => write('create_novel', { title: input.title }, context?.agent?.toolCallId, tx => {
+        const timestamp = now()
+        const brief = input.premise ? `${input.title}\n\n${input.premise}` : input.title
+        const novel = tx.insert(novelJobs).values({
+          dramaId: project, requestId: randomUUID().replace(/-/g, ''), brief,
+          projectContext: JSON.stringify(activeProject(project)), contentLanguage: run.contentLanguage,
+          configId: run.configId, model: run.model, status: 'ready', stage: 'ready', workflowMode: 'preview_first',
+          sourceType: 'ai', draftCount: 0, draftDone: 0, draftRevision: 1, optimizedDone: 0,
+          completedChapters: 0, createdAt: timestamp, updatedAt: timestamp,
+        }).returning().get()
+        return { kind: 'novel', novelId: novel.id, title: input.title, before: null, after: brief,
+          revision: String(novel.draftRevision) }
+      }),
+    }),
+    save_novel_plan: createTool({ id: 'save_novel_plan',
+      description: 'Save or replace the approved story plan for one novel. Read its revision first.',
+      inputSchema: z.object({ novel_id: id, base_revision: id,
+        plan: z.string().trim().min(1).max(30000) }),
+      execute: (input, context) => write('save_novel_plan', { novel_id: input.novel_id }, context?.agent?.toolCallId, tx => {
+        const novel = projectNovelInTx(tx, project, input.novel_id)
+        if (!novel) return { error: 'not_found' }
+        if (novel.status === 'running') return { error: 'novel_running' }
+        if (!canEditNovelDraft(novel)) return { error: 'novel_locked' }
+        if (novel.draftRevision !== input.base_revision) return { error: 'novel_changed' }
+        const revision = novel.draftRevision + 1
+        const timestamp = now()
+        tx.update(novelJobs).set({ storyPlan: input.plan, draftRevision: revision, status: 'ready',
+          stage: 'ready', episodeCount: null, optimizedDone: 0, errorCode: null, updatedAt: timestamp }).where(eq(novelJobs.id, novel.id)).run()
+        tx.update(novelManuscriptParts).set({ optimized: null, analysis: null })
+          .where(eq(novelManuscriptParts.jobId, novel.id)).run()
+        tx.update(dramas).set({ updatedAt: timestamp }).where(eq(dramas.id, project)).run()
+        return { kind: 'novel', novelId: novel.id, title: `${novelLabel(novel)} · 故事规划`,
+          before: novel.storyPlan, after: input.plan, baseRevision: String(novel.draftRevision), revision: String(revision) }
+      }),
+    }),
+    append_novel_part: createTool({ id: 'append_novel_part',
+      description: 'Append the next novel chapter or part with its title and continuity summary. Read the novel context first.',
+      inputSchema: z.object({ novel_id: id, base_revision: id, part_number: id,
+        title: z.string().trim().min(1).max(160), content: z.string().trim().min(1).max(50000),
+        summary: z.string().trim().min(1).max(3000) }),
+      execute: (input, context) => write('append_novel_part', { novel_id: input.novel_id, part_number: input.part_number },
+        context?.agent?.toolCallId, tx => {
+          const novel = projectNovelInTx(tx, project, input.novel_id)
+          if (!novel) return { error: 'not_found' }
+          if (novel.status === 'running') return { error: 'novel_running' }
+          if (!canEditNovelDraft(novel)) return { error: 'novel_locked' }
+          if (novel.draftRevision !== input.base_revision) return { error: 'novel_changed' }
+          if (input.part_number !== novel.draftCount + 1) return { error: 'part_number_conflict' }
+          const revision = novel.draftRevision + 1
+          const timestamp = now()
+          const draft = `${novel.draftCount ? '\n\n' : ''}# ${input.title}\n\n${input.content}`
+          tx.insert(novelManuscriptParts).values({ jobId: novel.id, partNumber: input.part_number,
+            draft, summary: input.summary }).run()
+          tx.update(novelJobs).set({ draftCount: input.part_number, draftDone: input.part_number,
+            draftRevision: revision, optimizedDone: 0, episodeCount: null, status: 'ready', stage: 'ready',
+            errorCode: null, updatedAt: timestamp }).where(eq(novelJobs.id, novel.id)).run()
+          tx.update(novelManuscriptParts).set({ optimized: null, analysis: null })
+            .where(eq(novelManuscriptParts.jobId, novel.id)).run()
+          tx.update(dramas).set({ updatedAt: timestamp }).where(eq(dramas.id, project)).run()
+          return { kind: 'novel', novelId: novel.id, partNumber: input.part_number,
+            title: `${novelLabel(novel)} · 第 ${input.part_number} 部`, before: null, after: draft,
+            baseRevision: String(novel.draftRevision), revision: String(revision) }
+        }),
+    }),
+    replace_novel_text: createTool({ id: 'replace_novel_text',
+      description: 'Replace one unique exact passage in a novel part. Use the revision and actual original text read from the part.',
+      inputSchema: z.object({ novel_id: id, base_revision: id, part_number: id,
+        original_text: z.string().min(1).max(50000), content: z.string().max(50000),
+        summary: z.string().trim().min(1).max(3000) }),
+      execute: (input, context) => write('replace_novel_text', { novel_id: input.novel_id, part_number: input.part_number },
+        context?.agent?.toolCallId, tx => {
+          const novel = projectNovelInTx(tx, project, input.novel_id)
+          if (!novel) return { error: 'not_found' }
+          if (novel.status === 'running') return { error: 'novel_running' }
+          if (!canEditNovelDraft(novel)) return { error: 'novel_locked' }
+          if (novel.draftRevision !== input.base_revision) return { error: 'novel_changed' }
+          const part = novelPartInTx(tx, novel.id, input.part_number)
+          if (!part) return { error: 'part_not_found' }
+          const draft = replaceUnique(part.draft, input.original_text, input.content)
+          if (draft === null) return { error: 'edit_target_changed' }
+          const revision = novel.draftRevision + 1
+          const timestamp = now()
+          tx.update(novelManuscriptParts).set({ draft, summary: input.summary, optimized: null, analysis: null })
+            .where(and(eq(novelManuscriptParts.jobId, novel.id), eq(novelManuscriptParts.partNumber, input.part_number))).run()
+          tx.update(novelManuscriptParts).set({ summary: null, optimized: null, analysis: null }).where(and(
+            eq(novelManuscriptParts.jobId, novel.id), gt(novelManuscriptParts.partNumber, input.part_number),
+          )).run()
+          tx.update(novelJobs).set({ draftRevision: revision, optimizedDone: 0, episodeCount: null,
+            status: 'ready', stage: 'ready', errorCode: null, updatedAt: timestamp }).where(eq(novelJobs.id, novel.id)).run()
+          tx.update(dramas).set({ updatedAt: timestamp }).where(eq(dramas.id, project)).run()
+          return { kind: 'novel', novelId: novel.id, partNumber: input.part_number,
+            title: `${novelLabel(novel)} · 第 ${input.part_number} 部`, before: input.original_text, after: input.content,
+            baseRevision: String(novel.draftRevision), revision: String(revision) }
+        }),
+    }),
+    split_novel_to_episodes: createTool({ id: 'split_novel_to_episodes',
+      description: 'Start converting one completed novel draft into episodes. Report it as a background job until reading a completed status.',
+      inputSchema: z.object({ novel_id: id, base_revision: id, episode_count: z.number().int().min(1).max(100) }),
+      execute: (input, context) => {
+        let imageConfigId: number | null = null
+        let videoConfigId: number | null = null
+        let lease: ReturnType<typeof createNovelLease> | null = null
+        return write('split_novel_to_episodes', { novel_id: input.novel_id, episode_count: input.episode_count },
+          context?.agent?.toolCallId, tx => {
+            const novel = projectNovelInTx(tx, project, input.novel_id)
+            if (!novel) return { error: 'not_found' }
+            if (novel.status === 'running') return { error: 'novel_running' }
+            if (!canEditNovelDraft(novel)) return { error: 'novel_locked' }
+            if (novel.draftRevision !== input.base_revision) return { error: 'novel_changed' }
+            if (!novel.draftCount || novel.draftDone !== novel.draftCount) return { error: 'draft_not_ready' }
+            const running = tx.select({ id: novelJobs.id }).from(novelJobs).where(and(
+              eq(novelJobs.dramaId, project), eq(novelJobs.status, 'running'),
+            )).get()
+            if (running) return { error: 'novel_running' }
+            lease = createNovelLease()
+            const timestamp = now()
+            tx.update(novelJobs).set({ status: 'running', stage: 'analyzing', episodeCount: input.episode_count,
+              configId: run.configId, model: run.model, imageConfigId, videoConfigId, errorCode: null,
+              optimizedDone: 0, updatedAt: timestamp, ...lease }).where(eq(novelJobs.id, novel.id)).run()
+            tx.update(novelManuscriptParts).set({ optimized: null, analysis: null })
+              .where(eq(novelManuscriptParts.jobId, novel.id)).run()
+            return { kind: 'novel', novelId: novel.id, title: `${novelLabel(novel)} · 分集任务`,
+              before: novel.status, after: JSON.stringify({ status: 'running', episode_count: input.episode_count }),
+              baseRevision: String(novel.draftRevision), revision: timestamp }
+          }, async () => {
+            [imageConfigId, videoConfigId] = await Promise.all([getActiveConfigId('image'), getActiveConfigId('video')])
+            if (!imageConfigId) throw new Error('image_unavailable')
+            if (!videoConfigId) throw new Error('video_unavailable')
+          }, () => {
+            if (lease) void runNovelJob(input.novel_id, lease.runToken)
+              .catch(() => console.error('[creative-agent] novel split failed', input.novel_id))
+          })
+      },
     }),
     edit_episode_scene: createTool({ id: 'edit_episode_scene',
       description: 'Replace unique exact text inside one scene and save. Use the revision obtained by reading the episode.',

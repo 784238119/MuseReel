@@ -7,13 +7,15 @@ export type CreativeTurn = {
   status: 'running' | 'completed' | 'partial' | 'failed' | 'interrupted' | 'stopped'; assistant_text: string; error_code: string | null;
 }
 export type CreativeChange = {
-  id: number; kind: 'episode' | 'outline'; episode_id: number | null; episode_number: number | null;
+  id: number; kind: 'episode' | 'outline' | 'novel'; episode_id: number | null; episode_number: number | null;
+  novel_id: number | null; part_number: number | null;
   title: string; scene: string | null; revision: string;
 }
 export type CreativeEvent = {
   seq: number; turn_id: number; kind: 'text' | 'tool_started' | 'tool_finished' | 'finished';
   payload: { text?: string; call_id?: string; tool?: string; status?: CreativeTurn['status']; error?: string | null;
-    target?: { episode_id?: number; episode_number?: number; scene?: string }; change?: CreativeChange };
+    target?: { episode_id?: number; episode_number?: number; novel_id?: number; part_number?: number;
+      job_status?: string; scene?: string }; change?: CreativeChange };
 }
 type ToolRow = { kind: 'tool'; seq: number; call: string; tool: string; target?: CreativeEvent['payload']['target'];
   state: 'running' | 'completed' | 'failed'; error?: string | null; change?: CreativeChange }
@@ -25,7 +27,8 @@ export const creativeAPI = {
     const params = new URLSearchParams({ after_episode: String(after) })
     if (query.trim()) params.set('query', query.trim())
     return api.get<{
-      episodes: { id: number; number: number; title: string }[]; novels: { id: number; title: string; created_at: string }[];
+      episodes: { id: number; number: number; title: string }[];
+      novels: { id: number; title: string; status: string; part_count: number; revision: number; created_at: string }[];
       has_source: boolean; next_after_episode: number | null;
     }>(`${creativePath(projectId)}/resources?${params}`)
   },
@@ -201,7 +204,7 @@ export function useCreativeAgent(projectId: number, onSaved: () => void) {
       const item = JSON.parse(incoming.data) as CreativeEvent
       const fresh = !events.value.some(existing => existing.seq === item.seq)
       merge([], [item])
-      if (fresh && item.payload.change) onSaved()
+      if (fresh && (item.payload.change || item.payload.target?.job_status === 'completed')) onSaved()
       if (item.kind === 'finished') connection.close()
     }
     connection.onerror = () => {
@@ -210,9 +213,9 @@ export function useCreativeAgent(projectId: number, onSaved: () => void) {
       clearTimeout(streamTimer)
       streamTimer = setTimeout(async () => {
         if (selected.value === null || stream !== connection) return
-        const count = events.value.filter(item => item.payload.change).length
+        const count = events.value.filter(item => item.payload.change || item.payload.target?.job_status === 'completed').length
         await loadTurns(selected.value).catch(() => {})
-        if (events.value.filter(item => item.payload.change).length > count) onSaved()
+        if (events.value.filter(item => item.payload.change || item.payload.target?.job_status === 'completed').length > count) onSaved()
       }, 900)
     }
   })

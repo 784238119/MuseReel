@@ -38,4 +38,4 @@ Open the [local workspace](http://localhost:5679). For Docker, run `docker compo
 
 ## License and attribution
 
-MuseReel is derived from [chatfire-AI/huobao-drama](https://github.com/chatfire-AI/huobao-drama), with changes to the project branding, documentation, and build artifact names. The project retains the [CC BY-NC-SA 4.0](LICENSE) license.
+This project is licensed under [CC BY-NC-SA 4.0](LICENSE).

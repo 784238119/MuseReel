@@ -19,4 +19,4 @@ MuseReel 会先保存上游任务编号和视频地址，再下载媒体。下�
 
 ## 网关兼容
 
-MuseReel 可使用上游响应头 `X-Firemux-Task-Id` 或 `X-Huobao-Task-Id` 关联已有任务。兼容网关明确返回 MiniMax 转存失败时，恢复流程可向原配置的 `/minimax/v2/query/video_generation/{taskId}/recover` 发起请求，然后继续查询原任务。上游视频生成结果和账单由对应服务管理。
+MuseReel 可使用上游返回的任务编号响应头关联已有任务。兼容网关明确返回 MiniMax 转存失败时，恢复流程可向原配置的 `/minimax/v2/query/video_generation/{taskId}/recover` 发起请求，然后继续查询原任务。上游视频生成结果和账单由对应服务管理。

@@ -24,6 +24,6 @@ npm run build:backend --prefix desktop
 
 AI 服务通过设置页维护，存入 SQLite。服务端可用 `SQLITE_PATH` 指定数据库位置，用 `WORKSPACE_PATH` 指定 Agent 工作区，用 `FFMPEG_BIN`、`FFPROBE_BIN` 覆盖媒体工具路径。
 
-本地默认数据库沿用 `data/huobao.sqlite3`。桌面版沿用上游的 `HuobaoDrama` 用户数据目录，开发版沿用独立的 `HuobaoDrama-Dev` 目录。安装 MuseReel 后可继续使用这些目录中的存量数据。
+本地默认数据库位于 `data/` 目录。桌面版和开发版分别保留独立的用户数据目录，安装 MuseReel 后可继续使用已有数据。
 
 兼容网关的视频交付和任务恢复流程见 [视频交付](video-delivery-implementation.md)。

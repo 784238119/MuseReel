@@ -38,4 +38,4 @@ FRONTEND_DIST="$PWD/frontend/.output/public" npm start --prefix backend
 
 ## 许可证与来源
 
-MuseReel 基于 [chatfire-AI/huobao-drama](https://github.com/chatfire-AI/huobao-drama) 改造，调整了项目品牌、文档和构建产物命名。项目沿用 [CC BY-NC-SA 4.0](LICENSE)。
+MuseReel 项目采用 [CC BY-NC-SA 4.0](LICENSE) 许可证。

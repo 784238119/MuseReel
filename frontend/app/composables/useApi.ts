@@ -36,7 +36,8 @@ async function req<T = any>(method: string, path: string, body?: any, logBody = 
 
 export const api = {
   get: <T = any>(p: string) => req<T>('GET', p),
-  post: <T = any>(p: string, b?: any) => req<T>('POST', p, b),
+  post: <T = any>(p: string, b?: any, logBody = true) => req<T>('POST', p, b, logBody),
+  patch: <T = any>(p: string, b?: any, logBody = true) => req<T>('PATCH', p, b, logBody),
   put: <T = any>(p: string, b?: any) => req<T>('PUT', p, b),
   del: <T = any>(p: string) => req<T>('DELETE', p),
 }

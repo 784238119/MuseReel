@@ -79,6 +79,56 @@ export const scriptJobEpisodes = sqliteTable('script_job_episodes', {
   episodeId: integer('episode_id'),
 }, t => [primaryKey({ columns: [t.jobId, t.ordinal] })])
 
+export type CreativeReference = { kind: 'episode' | 'novel' | 'source'; id?: number; scene?: string }
+
+export const creativeSessions = sqliteTable('creative_sessions', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  dramaId: integer('drama_id').notNull(),
+  title: text('title').notNull(),
+  updatedAt: text('updated_at').notNull(),
+})
+
+export const creativeTurns = sqliteTable('creative_turns', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  dramaId: integer('drama_id').notNull(),
+  sessionId: integer('session_id').notNull(),
+  resumeFromId: integer('resume_from_id'),
+  requestId: text('request_id').notNull(),
+  message: text('message').notNull(),
+  references: text('references_json', { mode: 'json' }).$type<CreativeReference[]>().notNull(),
+  configId: integer('config_id').notNull(),
+  model: text('model').notNull(),
+  contentLanguage: text('content_language').notNull(),
+  status: text('status').notNull(),
+  assistantText: text('assistant_text').notNull().default(''),
+  errorCode: text('error_code'),
+  runToken: text('run_token'),
+  leaseExpiresAt: integer('lease_expires_at'),
+  createdAt: text('created_at').notNull(),
+})
+
+export const creativeEvents = sqliteTable('creative_events', {
+  seq: integer('seq').primaryKey({ autoIncrement: true }),
+  turnId: integer('turn_id').notNull(),
+  kind: text('kind').notNull(),
+  payload: text('payload', { mode: 'json' }).$type<Record<string, unknown>>().notNull(),
+})
+
+export const creativeChanges = sqliteTable('creative_changes', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  turnId: integer('turn_id').notNull(),
+  callId: text('call_id').notNull(),
+  kind: text('kind').$type<'outline' | 'episode'>().notNull(),
+  episodeId: integer('episode_id'),
+  episodeNumber: integer('episode_number'),
+  title: text('title').notNull(),
+  scene: text('scene'),
+  before: text('before_text'),
+  after: text('after_text').notNull(),
+  baseRevision: text('base_revision'),
+  revision: text('revision').notNull(),
+})
+
 export const novelJobs = sqliteTable('novel_jobs', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   dramaId: integer('drama_id').notNull(),

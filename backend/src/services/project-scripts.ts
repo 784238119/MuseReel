@@ -69,6 +69,27 @@ export function beginEpisodeProduction(dramaId: number, id: number) {
   )).run()
 }
 
+export function saveProjectOutline(tx: ScriptTransaction, dramaId: number, revision: number, outline: Outline) {
+  const current = tx.select().from(projectScripts).where(eq(projectScripts.dramaId, dramaId)).get()
+  if (findBlockingScript(tx, dramaId) || (current?.revision ?? 0) !== revision) return { error: 'script_conflict' } as const
+  const value = JSON.stringify(outline)
+  tx.insert(projectScripts).values({ dramaId, outline: value, revision: revision + 1 })
+    .onConflictDoUpdate({ target: projectScripts.dramaId, set: { outline: value, revision: revision + 1 } }).run()
+  return { revision: revision + 1, before: current?.outline ?? null, after: value }
+}
+
+export function saveProjectEpisode(tx: ScriptTransaction, dramaId: number, episodeId: number,
+  value: { revision: string; title: string; script: string }) {
+  const episode = activeEpisode(tx, dramaId, episodeId)
+  if (!episode) return { error: 'not_found' } as const
+  if (!isScriptEditable(tx, episode)) return { error: 'production_locked' } as const
+  if (episode.updatedAt !== value.revision) return { error: 'script_conflict' } as const
+  const revision = new Date(Math.max(Date.now(), (Date.parse(episode.updatedAt) || 0) + 1)).toISOString()
+  tx.update(episodes).set({ title: value.title, scriptContent: value.script, updatedAt: revision }).where(eq(episodes.id, episodeId)).run()
+  tx.update(dramas).set({ updatedAt: revision }).where(eq(dramas.id, dramaId)).run()
+  return { episode, revision }
+}
+
 export function enqueueScript(tx: ScriptTransaction, values: {
   dramaId: number; kind: 'initial' | 'continue' | 'rewrite'; requestId: string
   count: number; configId: number; model: string; payload: ScriptPayload

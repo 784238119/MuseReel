@@ -7,6 +7,7 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 
 import dramas from './routes/dramas.js'
+import { startCreativeRecovery } from './services/creative-agent.js'
 import episodes from './routes/episodes.js'
 import storyboards from './routes/storyboards.js'
 import scenes from './routes/scenes.js'
@@ -93,4 +94,5 @@ await resumeInterruptedTasks()
 serve({ fetch: app.fetch, port }, () => {
   startNovelRecovery()
   startScriptRecovery()
+  startCreativeRecovery()
 })

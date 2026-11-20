@@ -31,7 +31,7 @@ let backendBundle = BACKEND_BUNDLE
 let runtimeResourcesDir = ''
 
 /** workspace 模板版本：内置模板更新时递增，触发向用户目录补缺失文件 */
-const TEMPLATE_VERSION = '6'
+const TEMPLATE_VERSION = '7'
 // 版本 5 随包分发的默认小说技能，按 LF 换行计算。
 const NOVEL_WRITER_V5_SHA256 = 'a0f249a11abd86d216ca6dc1f8a528d092760176e756082d4b6ef3a00384447c'
 const STORAGE_CONFIG_FILE = 'storage-config.json'
@@ -172,8 +172,11 @@ function syncWorkspaceTemplate(templateDir: string, destDir: string) {
   const marker = path.join(destDir, '.template-version')
   const installedVersion = fs.existsSync(marker) ? fs.readFileSync(marker, 'utf8').trim() : ''
   if (installedVersion === TEMPLATE_VERSION) return
-  if (installedVersion === '4' || installedVersion === '5') {
-    // 这两个版本只迁移小说技能，保留用户的其他模板。
+  if (['4', '5', '6'].includes(installedVersion)) {
+    const creativeSkill = path.join('skills', 'creative-agent')
+    fs.cpSync(path.join(templateDir, creativeSkill), path.join(destDir, creativeSkill), {
+      recursive: true, force: false, errorOnExist: false,
+    })
     if (installedVersion === '4') {
       for (const skill of ['novel-writer', 'novel-splitter']) {
         fs.cpSync(path.join(templateDir, 'skills', skill), path.join(destDir, 'skills', skill), {
@@ -183,7 +186,7 @@ function syncWorkspaceTemplate(templateDir: string, destDir: string) {
     }
     const relativeSkill = path.join('skills', 'novel-writer', 'SKILL.md')
     const installedSkill = path.join(destDir, relativeSkill)
-    if (fs.existsSync(installedSkill)) {
+    if (installedVersion !== '6' && fs.existsSync(installedSkill)) {
       const current = fs.readFileSync(installedSkill, 'utf8').replace(/\r\n/g, '\n')
       if (createHash('sha256').update(current).digest('hex') === NOVEL_WRITER_V5_SHA256) {
         const temporary = `${installedSkill}.template-tmp`

@@ -7,7 +7,7 @@ import { getActiveConfigId } from '../services/ai.js'
 import { EXTRACT_TARGETS, getExtractionStatus, startExtraction, type ExtractTarget } from '../services/extraction.js'
 import { getVideoPromptBatchStatus, startVideoPromptBatch } from '../services/video-prompts.js'
 import { nextEpisodeNumber } from '../services/episode-number.js'
-import { beginEpisodeProduction } from '../services/project-scripts.js'
+import { beginEpisodeProduction, isScriptEditable } from '../services/project-scripts.js'
 
 const app = new Hono()
 
@@ -71,7 +71,19 @@ app.put('/:id', async (c) => {
   if ('status' in updates) drizzleUpdates.status = updates.status
   if ('resolution' in updates) drizzleUpdates.resolution = updates.resolution
 
-  await db.update(schema.episodes).set(drizzleUpdates).where(eq(schema.episodes.id, id))
+  const result = db.transaction(tx => {
+    const episode = tx.select().from(schema.episodes)
+      .where(and(eq(schema.episodes.id, id), isNull(schema.episodes.deletedAt))).get()
+    if (!episode) return { error: 'not_found' } as const
+    const updatesScript = ('content' in updates && updates.content !== episode.content)
+      || ('script_content' in updates && updates.script_content !== episode.scriptContent)
+    if (updatesScript && !isScriptEditable(tx, episode)) return { error: 'production_locked' } as const
+    tx.update(schema.episodes).set(drizzleUpdates)
+      .where(and(eq(schema.episodes.id, id), isNull(schema.episodes.deletedAt))).run()
+    return { error: null }
+  }, { behavior: 'immediate' })
+  if (result.error === 'not_found') return notFound(c, '剧集不存在')
+  if (result.error) return c.json({ code: 409, message: result.error }, 409)
   return success(c)
 })
 

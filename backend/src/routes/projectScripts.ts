@@ -8,7 +8,7 @@ import { createNovelLease, resolveNovelModel } from '../services/novels.js'
 import { scriptCount, scriptSource, inspectScriptImport, formattedScript, projectOutline, MAX_SCRIPT_BYTES } from '../services/script-import.js'
 import {
   activeEpisode, activeProject, beginEpisodeProduction, enqueueScript, findBlockingScript, getScriptParts,
-  isScriptEditable, launchScript, recentEpisodes, scriptJobFields,
+  isScriptEditable, launchScript, recentEpisodes, saveProjectEpisode, saveProjectOutline, scriptJobFields,
 } from '../services/project-scripts.js'
 import { badRequest, created, notFound, now, serverError, success } from '../utils/response.js'
 
@@ -112,15 +112,8 @@ projectScript.put('/outline', async c => {
     .safeParse(await c.req.json().catch(() => null))
   if (!parsed.success) return badRequest(c, 'invalid_request')
   const { revision, outline } = parsed.data
-  const saved = db.transaction(tx => {
-    if (findBlockingScript(tx, dramaId)) return false
-    const current = tx.select().from(projectScripts).where(eq(projectScripts.dramaId, dramaId)).get()
-    if ((current?.revision ?? 0) !== revision) return false
-    tx.insert(projectScripts).values({ dramaId, outline: JSON.stringify(outline), revision: revision + 1 })
-      .onConflictDoUpdate({ target: projectScripts.dramaId, set: { outline: JSON.stringify(outline), revision: revision + 1 } }).run()
-    return true
-  }, { behavior: 'immediate' })
-  return saved ? success(c, { outline, revision: revision + 1 }) : c.json({ code: 409, message: 'script_conflict' }, 409)
+  const saved = db.transaction(tx => saveProjectOutline(tx, dramaId, revision, outline), { behavior: 'immediate' })
+  return saved.error ? c.json({ code: 409, message: saved.error }, 409) : success(c, { outline, revision: saved.revision })
 })
 
 projectScript.get('/episodes/:episodeId', c => {
@@ -142,18 +135,9 @@ projectScript.put('/episodes/:episodeId', async c => {
   const parsed = z.object({ revision: z.string(), title: z.string().trim().min(1).max(160), script: formattedScript })
     .safeParse(await c.req.json().catch(() => null))
   if (!parsed.success) return badRequest(c, 'invalid_script')
-  const value = parsed.data
-  const result = db.transaction(tx => {
-    const episode = activeEpisode(tx, dramaId, id)
-    if (!episode) return 'not_found'
-    if (!isScriptEditable(tx, episode)) return 'production_locked'
-    if (episode.updatedAt !== value.revision) return 'script_conflict'
-    tx.update(episodes).set({ title: value.title, scriptContent: value.script, updatedAt: now() }).where(eq(episodes.id, id)).run()
-    tx.update(dramas).set({ updatedAt: now() }).where(eq(dramas.id, dramaId)).run()
-    return null
-  }, { behavior: 'immediate' })
-  if (result === 'not_found') return notFound(c)
-  return result ? c.json({ code: 409, message: result }, 409) : success(c)
+  const result = db.transaction(tx => saveProjectEpisode(tx, dramaId, id, parsed.data), { behavior: 'immediate' })
+  if (result.error === 'not_found') return notFound(c)
+  return result.error ? c.json({ code: 409, message: result.error }, 409) : success(c)
 })
 
 projectScript.post('/episodes/:episodeId/production', c => {

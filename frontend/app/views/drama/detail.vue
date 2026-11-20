@@ -1,7 +1,7 @@
 <template>
-  <div class="page" v-if="drama">
+  <div v-if="drama" class="page" :class="{ 'creative-page': activeTab === 'creative' }">
     <!-- Header：单行紧凑 -->
-    <div class="page-head card">
+    <div v-if="activeTab !== 'creative'" class="page-head card">
       <button class="back-btn" :title="t('common.back')" @click="navigateTo('/')">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/>
@@ -35,6 +35,13 @@
 
     <!-- 主 Tab：剧集列表 / 素材库 -->
     <nav class="page-tabs">
+      <div v-if="activeTab === 'creative'" class="creative-project">
+        <button type="button" class="back-btn" :title="t('common.back')" @click="navigateTo('/')"><ArrowLeft :size="17" /></button>
+        <strong>{{ drama.title }}</strong>
+      </div>
+      <button type="button" :class="['tab-btn', { on: activeTab === 'creative' }]" @click="openCreativeAgent">
+        {{ t('creativeAgent.title') }}
+      </button>
       <button type="button" :class="['tab-btn', { on: activeTab === 'script' }]" @click="openProjectScript">
         {{ t('projectScript.title') }}
       </button>
@@ -53,8 +60,11 @@
       </button>
     </nav>
 
-    <ProjectScriptWorkshop v-if="scriptOpened" v-show="activeTab === 'script'" :drama-id="dramaId"
-      :episodes="drama.episodes" @published="load" />
+    <ProjectScriptWorkshop v-if="scriptOpened" v-show="activeTab === 'script'" ref="scriptWorkshop" :drama-id="dramaId"
+      :episodes="drama.episodes" :external-revision="scriptRevision" @published="load" />
+
+    <CreativeAgentWorkspace v-if="creativeOpened" v-show="activeTab === 'creative'" :key="dramaId" :project-id="dramaId"
+      :episodes="drama.episodes" @saved="onCreativeSaved" @open-script="openCreativeScript" />
 
     <div v-if="activeTab === 'episodes'" class="ep-grid">
       <div
@@ -578,11 +588,13 @@
 
 <script setup>
 import { toast } from 'vue-sonner'
+import { ArrowLeft } from 'lucide-vue-next'
 import { toastError } from '~/composables/useToast'
 import { useI18n } from 'vue-i18n'
 import { dramaAPI, episodeAPI, characterAPI, sceneAPI, propAPI, uploadAPI } from '~/composables/useApi'
 import BaseSelect from '~/components/BaseSelect.vue'
 import NovelWorkshop from '~/components/NovelWorkshop.vue'
+import CreativeAgentWorkspace from '~/components/CreativeAgentWorkspace.vue'
 
 const { t, locale } = useI18n()
 
@@ -707,12 +719,29 @@ async function confirmDelEpisode() {
 
 /* ===== 素材库 Tab ===== */
 const novelOpened = ref(route.query.tab === 'novel')
-const activeTab = ref(novelOpened.value ? 'novel' : route.query.tab === 'episodes' ? 'episodes' : 'script')
+const creativeOpened = ref(route.query.tab === 'creative')
+const activeTab = ref(creativeOpened.value ? 'creative' : novelOpened.value ? 'novel' : route.query.tab === 'episodes' ? 'episodes' : 'script')
 const scriptOpened = ref(activeTab.value === 'script')
+const scriptWorkshop = ref(null)
+const scriptRevision = ref(0)
 watch(activeTab, (tab, previous) => {
-  if (tab !== 'novel' && previous !== 'novel') return
-  void router.replace({ query: { ...route.query, tab: tab === 'novel' || tab === 'episodes' ? tab : undefined } })
+  if (![tab, previous].some(item => ['novel', 'creative'].includes(item))) return
+  void router.replace({ query: { ...route.query, tab: ['novel', 'creative', 'episodes'].includes(tab) ? tab : undefined } })
 })
+function openCreativeAgent() {
+  creativeOpened.value = true
+  activeTab.value = 'creative'
+}
+async function onCreativeSaved() {
+  await load()
+  scriptRevision.value++
+}
+async function openCreativeScript(episodeId) {
+  openProjectScript()
+  if (episodeId !== null && !drama.value.episodes.some(episode => episode.id === episodeId)) await load()
+  await nextTick()
+  scriptWorkshop.value?.openDocument(episodeId)
+}
 function openProjectScript() {
   scriptOpened.value = true
   activeTab.value = 'script'
@@ -968,6 +997,18 @@ onMounted(load)
   overflow-y: auto;
   height: 100%;
   animation: fadeUp 0.35s var(--ease-out) both;
+}
+.page.creative-page { padding: 0; display: flex; flex-direction: column; overflow: hidden; }
+.creative-page .page-tabs { margin: 0; padding: 0 20px; min-height: 69px; flex-shrink: 0; border-radius: 0; }
+.creative-page .page-tabs .tab-btn { font-size: 15px; }
+.creative-page .page-tabs .tab-btn.on { color: var(--accent-text); }
+.creative-project { display: flex; align-items: center; padding-inline-end: 11px; gap: 8px; white-space: nowrap; }
+.creative-project strong { max-width: 170px; overflow: hidden; text-overflow: ellipsis; font-size: 19px; }
+@media (max-width: 900px) {
+  .creative-page .page-tabs { overflow-x: auto; padding-inline: 12px; min-height: 52px; }
+  .creative-page .page-tabs .tab-btn, .creative-project { flex-shrink: 0; white-space: nowrap; }
+  .creative-page .page-tabs .tab-btn { margin-inline-end: 10px; }
+  .creative-project strong { max-width: 100px; font-size: 16px; }
 }
 
 /* Header card：单行紧凑 */

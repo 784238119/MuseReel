@@ -4,14 +4,16 @@ import { db, getInsertId, schema } from '../db/index.js'
 import { success, badRequest, notFound, created, now, serverError } from '../utils/response.js'
 import { toSnakeCase, toSnakeCaseArray } from '../utils/transform.js'
 import novels from './novels.js'
+import creativeAgent from './creative-agent.js'
 import { projectScript, importPreview, scriptCreation, scriptBodyLimit } from './projectScripts.js'
-import { enqueueScript, launchScript } from '../services/project-scripts.js'
+import { enqueueScript, isScriptEditable, launchScript } from '../services/project-scripts.js'
 import { inspectScriptImport } from '../services/script-import.js'
 import { resolveNovelModel } from '../services/novels.js'
 import { getContentLanguage } from '../services/app-settings.js'
 
 const app = new Hono()
 app.route('/:id/novel-jobs', novels)
+app.route('/:id/creative-agent', creativeAgent)
 app.route('/script-import-preview', importPreview)
 app.route('/:id/script', projectScript)
 
@@ -27,6 +29,12 @@ function listEpisodes(dramaId: number, summary: boolean) {
     }).from(episodes).where(filter).all()
   }
   return db.select().from(episodes).where(filter).all()
+}
+
+function updatesEpisodeScript(episode: Record<string, unknown>, current: typeof schema.episodes.$inferSelect) {
+  return ('content' in episode && episode.content !== current.content)
+    || ('script_content' in episode && episode.script_content !== current.scriptContent)
+    || ('scriptContent' in episode && episode.scriptContent !== current.scriptContent)
 }
 
 // GET /dramas - List dramas
@@ -233,20 +241,42 @@ app.put('/:id/episodes', async (c) => {
   const episodes = body.episodes || []
   const ts = now()
 
-  for (const ep of episodes) {
-    if (ep.id) {
-      await db.update(schema.episodes).set({ ...ep, updatedAt: ts }).where(eq(schema.episodes.id, ep.id))
-    } else {
-      await db.insert(schema.episodes).values({
-        ...ep,
-        dramaId,
-        episodeNumber: ep.episode_number || ep.episodeNumber || 1,
-        title: ep.title || '未命名',
-        createdAt: ts,
-        updatedAt: ts,
-      })
+  const result = db.transaction(tx => {
+    for (const ep of episodes) {
+      if (ep.id) {
+        const episode = tx.select().from(schema.episodes).where(and(
+          eq(schema.episodes.id, Number(ep.id)),
+          eq(schema.episodes.dramaId, dramaId),
+          isNull(schema.episodes.deletedAt),
+        )).get()
+        if (!episode) return { error: 'not_found' } as const
+        if (updatesEpisodeScript(ep, episode) && !isScriptEditable(tx, episode)) {
+          return { error: 'production_locked' } as const
+        }
+      }
     }
-  }
+
+    for (const ep of episodes) {
+      if (ep.id) {
+        tx.update(schema.episodes).set({ ...ep, updatedAt: ts }).where(and(
+          eq(schema.episodes.id, Number(ep.id)),
+          eq(schema.episodes.dramaId, dramaId),
+        )).run()
+      } else {
+        tx.insert(schema.episodes).values({
+          ...ep,
+          dramaId,
+          episodeNumber: ep.episode_number || ep.episodeNumber || 1,
+          title: ep.title || '未命名',
+          createdAt: ts,
+          updatedAt: ts,
+        }).run()
+      }
+    }
+    return { error: null }
+  }, { behavior: 'immediate' })
+  if (result.error === 'not_found') return notFound(c, '剧集不存在')
+  if (result.error) return c.json({ code: 409, message: result.error }, 409)
   return success(c)
 })
 

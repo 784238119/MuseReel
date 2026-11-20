@@ -134,15 +134,23 @@ description: 小说故事规划、章节衔接和原稿润色
 `
   const updated = await boot('healthy', { templateVersion: '5', novelSkill: original.replaceAll('\n', '\r\n') })
   assert.equal(updated.forks(), 1)
-  assert.equal(updated.copies.length, 1)
-  const [source, temporary] = updated.copies[0]
+  assert.equal(updated.copies.length, 2)
+  assert.match(updated.copies[0][0], /workspace-template\/skills\/creative-agent$/)
+  const [source, temporary] = updated.copies[1]
   assert.match(source, /workspace-template\/skills\/novel-writer\/SKILL\.md$/)
   assert.deepEqual(updated.replacements, [[temporary, temporary.replace(/\.template-tmp$/, '')]])
-  assert.equal(updated.writes.find(([file]) => file.endsWith('.template-version'))?.[1], '6')
+  assert.equal(updated.writes.find(([file]) => file.endsWith('.template-version'))?.[1], '7')
 
   const customized = await boot('healthy', { templateVersion: '5', novelSkill: original + '\n自定义规则。' })
   assert.equal(customized.forks(), 1)
-  assert.deepEqual(customized.copies, [])
+  assert.equal(customized.copies.length, 1)
+  assert.match(customized.copies[0][0], /workspace-template\/skills\/creative-agent$/)
   assert.deepEqual(customized.replacements, [])
-  assert.equal(customized.writes.find(([file]) => file.endsWith('.template-version'))?.[1], '6')
+  assert.equal(customized.writes.find(([file]) => file.endsWith('.template-version'))?.[1], '7')
+
+  const fromV6 = await boot('healthy', { templateVersion: '6' })
+  assert.equal(fromV6.forks(), 1)
+  assert.equal(fromV6.copies.length, 1)
+  assert.match(fromV6.copies[0][0], /workspace-template\/skills\/creative-agent$/)
+  assert.deepEqual(fromV6.replacements, [])
 })

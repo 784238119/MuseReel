@@ -95,6 +95,27 @@ export const sqliteSchemaStatements = [
     job_id INTEGER NOT NULL, ordinal INTEGER NOT NULL, title TEXT, raw TEXT, script TEXT,
     episode_id INTEGER, PRIMARY KEY (job_id, ordinal)
   )`,
+  `CREATE TABLE IF NOT EXISTS creative_sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, drama_id INTEGER NOT NULL, title TEXT NOT NULL, updated_at TEXT NOT NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_creative_sessions_project ON creative_sessions (drama_id, id)`,
+  `CREATE TABLE IF NOT EXISTS creative_turns (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, drama_id INTEGER NOT NULL, session_id INTEGER NOT NULL, resume_from_id INTEGER,
+    request_id TEXT NOT NULL, message TEXT NOT NULL, references_json TEXT NOT NULL, config_id INTEGER NOT NULL,
+    model TEXT NOT NULL, content_language TEXT NOT NULL, status TEXT NOT NULL, assistant_text TEXT NOT NULL DEFAULT '',
+    error_code TEXT, run_token TEXT, lease_expires_at INTEGER, created_at TEXT NOT NULL, UNIQUE (drama_id, request_id)
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_creative_turns_session ON creative_turns (session_id, id)`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_creative_session_running ON creative_turns (session_id) WHERE status = 'running'`,
+  `CREATE TABLE IF NOT EXISTS creative_events (
+    seq INTEGER PRIMARY KEY AUTOINCREMENT, turn_id INTEGER NOT NULL, kind TEXT NOT NULL, payload TEXT NOT NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_creative_events_turn ON creative_events (turn_id, seq)`,
+  `CREATE TABLE IF NOT EXISTS creative_changes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, turn_id INTEGER NOT NULL, call_id TEXT NOT NULL,
+    kind TEXT NOT NULL, episode_id INTEGER, episode_number INTEGER, title TEXT NOT NULL, scene TEXT,
+    before_text TEXT, after_text TEXT NOT NULL, base_revision TEXT, revision TEXT NOT NULL, UNIQUE (turn_id, call_id)
+  )`,
   `CREATE TABLE IF NOT EXISTS novel_jobs ${novelJobColumns}`,
   novelRunningIndex,
   `CREATE TABLE IF NOT EXISTS novel_chapters (

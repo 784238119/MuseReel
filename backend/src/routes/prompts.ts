@@ -8,13 +8,14 @@ import { success, badRequest } from '../utils/response.js'
 import { skillsManagerWorkspace } from '../agents/skills.js'
 import { validAgentTypes, DEFAULT_PROMPTS } from '../agents/index.js'
 import { NOVEL_PROMPTS } from '../agents/novel-prompts.js'
+import { creativePrompt } from '../agents/creative-prompt.js'
 import { loadAgentPromptFile, serializePromptFile, promptFilePath } from '../agents/prompts.js'
 
 const app = new Hono()
 const fsm = () => skillsManagerWorkspace.filesystem!
 
-const promptTypes = [...validAgentTypes, ...Object.keys(NOVEL_PROMPTS)]
-const prompts: typeof DEFAULT_PROMPTS = { ...DEFAULT_PROMPTS, ...NOVEL_PROMPTS }
+const prompts: typeof DEFAULT_PROMPTS = { ...DEFAULT_PROMPTS, ...NOVEL_PROMPTS, creative_agent: creativePrompt }
+const promptTypes = [...validAgentTypes, ...Object.keys(NOVEL_PROMPTS), 'creative_agent']
 const checkType = (type: string) => promptTypes.includes(type)
 const LANGS = ['zh', 'en', 'ja', 'ko']
 const normalizeLang = (v?: string) => (v && LANGS.includes(v) ? v : 'zh')

@@ -61,7 +61,8 @@ test('project setup, uploads, continuation, and protected rewrite use the normal
   assert.ok(address && typeof address !== 'string')
   const { db, schema } = await import('../src/db/index.js')
   const { default: dramas } = await import('../src/routes/dramas.js')
-  const app = new Hono().route('/api/v1/dramas', dramas)
+  const { default: episodesRoute } = await import('../src/routes/episodes.js')
+  const app = new Hono().route('/api/v1/dramas', dramas).route('/api/v1/episodes', episodesRoute)
   const timestamp = new Date().toISOString()
   const config = db.insert(schema.aiServiceConfigs).values({
     name: 'Text', serviceType: 'text', provider: 'openai', baseUrl: `http://127.0.0.1:${address.port}`,
@@ -140,6 +141,28 @@ test('project setup, uploads, continuation, and protected rewrite use the normal
   const blocked = await request(root + `/jobs/${review.job.id}/resolve`, 'POST', { apply: true })
   assert.equal(blocked.message, 'production_locked')
   assert.equal((await request(episodeRoute)).data.editable, false)
+  const legacyLocked = await app.request(`/api/v1/episodes/${episodeId}`, {
+    method: 'PUT', body: JSON.stringify({ script_content: '不应写入的旧版正文' }),
+  })
+  assert.equal(legacyLocked.status, 409)
+  assert.equal((await legacyLocked.json() as { message: string }).message, 'production_locked')
+  const batchLocked = await request(`/${project}/episodes`, 'PUT', {
+    episodes: [{ id: episodeId, script_content: '不应写入的批量正文' }],
+  })
+  assert.equal(batchLocked.status, 409)
+  assert.equal(batchLocked.message, 'production_locked')
+  const rolledBackDescription = '锁定项失败时不提交其他剧集'
+  const mixedBatch = await request(`/${project}/episodes`, 'PUT', {
+    episodes: [{ id: current[1].id, description: rolledBackDescription }, { id: episodeId, content: '不应写入的混合批量正文' }],
+  })
+  assert.equal(mixedBatch.status, 409)
+  assert.notEqual(db.select({ description: schema.episodes.description }).from(schema.episodes)
+    .where(eq(schema.episodes.id, current[1].id)).get()?.description, rolledBackDescription)
+  const lockedSnapshot = (await request(episodeRoute)).data
+  const batchMetadata = await request(`/${project}/episodes`, 'PUT', {
+    episodes: [{ id: episodeId, description: '进入制作后仍可更新说明', script_content: lockedSnapshot.script }],
+  })
+  assert.equal(batchMetadata.status, 200)
   await request(root + `/jobs/${review.job.id}/resolve`, 'POST', { apply: false })
   const otherRoute = root + '/episodes/' + current[1].id
   const other = (await request(otherRoute)).data

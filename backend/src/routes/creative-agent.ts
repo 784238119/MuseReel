@@ -54,15 +54,17 @@ app.get('/sessions', c => {
   const all = db.select(sessionFields).from(sessions).where(eq(sessions.dramaId, projectId))
     .orderBy(desc(sessions.updatedAt), desc(sessions.id)).offset(start.data).limit(pageSize + 1).all()
   const page = all.slice(0, pageSize)
-  const recent = page.length ? db.select({ id: turns.id, sessionId: turns.sessionId, status: turns.status,
-    errorCode: turns.errorCode, model: turns.model, configId: turns.configId, createdAt: turns.createdAt }).from(turns)
-    .where(inArray(turns.sessionId, page.map(session => session.id))).orderBy(desc(turns.id)).all() : []
-  const latestBySession = new Map<number, (typeof recent)[number]>()
-  const activeBySession = new Map<number, number>()
-  for (const turn of recent) {
-    if (!latestBySession.has(turn.sessionId)) latestBySession.set(turn.sessionId, turn)
-    if (turn.status === 'running' && !activeBySession.has(turn.sessionId)) activeBySession.set(turn.sessionId, turn.id)
+  const sessionIds = page.map(session => session.id)
+  const active = sessionIds.length ? db.select({ id: turns.id, sessionId: turns.sessionId }).from(turns)
+    .where(and(eq(turns.status, 'running'), inArray(turns.sessionId, sessionIds))).all() : []
+  const activeBySession = new Map(active.map(turn => [turn.sessionId, turn.id]))
+  const latestBySession = new Map<number, ReturnType<typeof latestTurn> | null>()
+  function latestTurn(sessionId: number) {
+    return db.select({ status: turns.status, errorCode: turns.errorCode, model: turns.model,
+      configId: turns.configId, createdAt: turns.createdAt }).from(turns)
+      .where(eq(turns.sessionId, sessionId)).orderBy(desc(turns.id)).limit(1).get()
   }
+  for (const sessionId of sessionIds) latestBySession.set(sessionId, latestTurn(sessionId) ?? null)
   return success(c, { sessions: page.map(session => {
     const latest = latestBySession.get(session.id)
     return { ...session, active_turn_id: activeBySession.get(session.id) ?? null,

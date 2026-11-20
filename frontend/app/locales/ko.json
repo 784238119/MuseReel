@@ -22,6 +22,7 @@
     "attempt": "{n}번째 시도",
     "retryCurrentModel": "현재 모델로 재시도",
     "retryAnotherModel": "다른 모델로 재시도",
+    "retryLatestOnly": "최신 실행만 재시도할 수 있으며 이전 시도는 확인용으로 유지됩니다.",
     "retryWithModel": "이 모델로 재시도",
     "actualModel": "사용 모델",
     "lastCompletedStep": "마지막 완료 단계",

@@ -25,6 +25,8 @@ import storage from './routes/storage.js'
 import serverUpdate from './routes/serverUpdate.js'
 import { requestLogger, errorHandler } from './middleware/logger.js'
 import { resumeInterruptedTasks } from './services/generation.js'
+import { startNovelRecovery } from './services/novels.js'
+import { startScriptRecovery } from './services/project-scripts.js'
 import { DATA_ROOT } from './utils/paths.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -88,4 +90,7 @@ console.log(`🚀 MuseReel server on http://localhost:${port}`)
 
 await resumeInterruptedTasks()
 
-serve({ fetch: app.fetch, port })
+serve({ fetch: app.fetch, port }, () => {
+  startNovelRecovery()
+  startScriptRecovery()
+})

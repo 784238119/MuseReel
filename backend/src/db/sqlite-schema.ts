@@ -6,6 +6,39 @@
  */
 import type Database from 'better-sqlite3'
 
+const novelJobColumns = `(
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  drama_id INTEGER NOT NULL,
+  request_id TEXT NOT NULL,
+  brief TEXT NOT NULL,
+  project_context TEXT NOT NULL,
+  episode_count INTEGER,
+  target_length INTEGER,
+  config_id INTEGER,
+  model TEXT,
+  content_language TEXT NOT NULL,
+  image_config_id INTEGER,
+  video_config_id INTEGER,
+  status TEXT NOT NULL,
+  stage TEXT NOT NULL,
+  workflow_mode TEXT NOT NULL DEFAULT 'automatic',
+  source_type TEXT NOT NULL DEFAULT 'legacy',
+  draft_count INTEGER NOT NULL DEFAULT 0,
+  draft_done INTEGER NOT NULL DEFAULT 0,
+  optimized_done INTEGER NOT NULL DEFAULT 0,
+  story_plan TEXT,
+  outline TEXT,
+  completed_chapters INTEGER NOT NULL DEFAULT 0,
+  error_code TEXT,
+  run_token TEXT,
+  lease_expires_at INTEGER,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  UNIQUE (drama_id, request_id)
+)`
+const novelRunningIndex = `CREATE UNIQUE INDEX IF NOT EXISTS idx_novel_running
+  ON novel_jobs (drama_id) WHERE status = 'running'`
+
 export const sqliteSchemaStatements = [
   `CREATE TABLE IF NOT EXISTS dramas (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -43,6 +76,43 @@ export const sqliteSchemaStatements = [
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     deleted_at TEXT
+  )`,
+
+  `CREATE TABLE IF NOT EXISTS project_scripts (
+    drama_id INTEGER PRIMARY KEY, outline TEXT NOT NULL, revision INTEGER NOT NULL DEFAULT 1
+  )`,
+  `CREATE TABLE IF NOT EXISTS script_jobs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, drama_id INTEGER NOT NULL, request_id TEXT NOT NULL UNIQUE,
+    kind TEXT NOT NULL, payload TEXT NOT NULL, config_id INTEGER NOT NULL, model TEXT NOT NULL,
+    count INTEGER NOT NULL, status TEXT NOT NULL, stage TEXT NOT NULL, outline TEXT, analysis TEXT,
+    analyzed_parts INTEGER NOT NULL DEFAULT 0, run_token TEXT, lease_expires_at INTEGER,
+    error_code TEXT, created_at TEXT NOT NULL
+  )`,
+  `CREATE INDEX IF NOT EXISTS idx_script_job_project ON script_jobs (drama_id, id)`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_script_job_running ON script_jobs (drama_id) WHERE status = 'running'`,
+  `CREATE TABLE IF NOT EXISTS script_job_episodes (
+    job_id INTEGER NOT NULL, ordinal INTEGER NOT NULL, title TEXT, raw TEXT, script TEXT,
+    episode_id INTEGER, PRIMARY KEY (job_id, ordinal)
+  )`,
+  `CREATE TABLE IF NOT EXISTS novel_jobs ${novelJobColumns}`,
+  novelRunningIndex,
+  `CREATE TABLE IF NOT EXISTS novel_chapters (
+    job_id INTEGER NOT NULL,
+    chapter_number INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    content TEXT NOT NULL,
+    summary TEXT NOT NULL,
+    episode_id INTEGER,
+    PRIMARY KEY (job_id, chapter_number)
+  )`,
+  `CREATE TABLE IF NOT EXISTS novel_manuscript_parts (
+    job_id INTEGER NOT NULL,
+    part_number INTEGER NOT NULL,
+    draft TEXT NOT NULL,
+    optimized TEXT,
+    summary TEXT,
+    analysis TEXT,
+    PRIMARY KEY (job_id, part_number)
   )`,
 
   `CREATE TABLE IF NOT EXISTS characters (
@@ -380,6 +450,23 @@ export function initSqliteSchema(sqlite: Database.Database) {
   for (const statement of sqliteSchemaStatements) {
     sqlite.exec(statement)
   }
+  sqlite.transaction(() => {
+    const episodeColumns = sqlite.prepare('PRAGMA table_info(episodes)').all() as { name: string }[]
+    if (!episodeColumns.some(column => column.name === 'production_started_at')) {
+      sqlite.exec('ALTER TABLE episodes ADD COLUMN production_started_at TEXT')
+    }
+    const columns = sqlite.prepare('PRAGMA table_info(novel_jobs)').all() as { name: string }[]
+    if (columns.some(column => column.name === 'workflow_mode')) return
+    // 旧任务原样迁入。显式分集前，原稿可以没有集数、分集模型和图视频配置。
+    sqlite.exec(`CREATE TABLE novel_jobs_upgrade ${novelJobColumns}`)
+    const previousNames = new Set(columns.map(column => column.name))
+    const newColumns = sqlite.prepare('PRAGMA table_info(novel_jobs_upgrade)').all() as { name: string }[]
+    const shared = newColumns.map(column => column.name).filter(name => previousNames.has(name)).join(', ')
+    sqlite.exec(`INSERT INTO novel_jobs_upgrade (${shared}) SELECT ${shared} FROM novel_jobs`)
+    sqlite.exec('DROP TABLE novel_jobs')
+    sqlite.exec('ALTER TABLE novel_jobs_upgrade RENAME TO novel_jobs')
+    sqlite.exec(novelRunningIndex)
+  }).immediate()
   // 兼容已安装的桌面版；仅增加任务恢复元数据，不改写历史生成结果。
   const taskColumns = new Set((sqlite.prepare('PRAGMA table_info(sys_task)').all() as { name: string }[]).map(c => c.name))
   for (const [name, type] of Object.entries({ config_id: 'INTEGER', config_base_url: 'TEXT', stage: 'TEXT', error_code: 'TEXT' })) {

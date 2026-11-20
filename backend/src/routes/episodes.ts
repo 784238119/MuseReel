@@ -1,11 +1,13 @@
 import { Hono } from 'hono'
 import { and, eq, isNull } from 'drizzle-orm'
-import { db, getInsertId, schema } from '../db/index.js'
+import { db, schema } from '../db/index.js'
 import { success, notFound, badRequest, now } from '../utils/response.js'
 import { toSnakeCaseArray, toSnakeCase } from '../utils/transform.js'
 import { getActiveConfigId } from '../services/ai.js'
 import { EXTRACT_TARGETS, getExtractionStatus, startExtraction, type ExtractTarget } from '../services/extraction.js'
 import { getVideoPromptBatchStatus, startVideoPromptBatch } from '../services/video-prompts.js'
+import { nextEpisodeNumber } from '../services/episode-number.js'
+import { beginEpisodeProduction } from '../services/project-scripts.js'
 
 const app = new Hono()
 
@@ -22,25 +24,19 @@ app.post('/', async (c) => {
   const ts = now()
 
   // Get next episode number（忽略已软删的集，删除中间集后新集号可复用空位之后的最大值）
-  const existing = await db.select().from(schema.episodes)
-    .where(and(eq(schema.episodes.dramaId, body.drama_id), isNull(schema.episodes.deletedAt)))
-    .orderBy(schema.episodes.episodeNumber)
-  const nextNum = existing.length ? Math.max(...existing.map(e => e.episodeNumber)) + 1 : 1
-
-  const res = await db.insert(schema.episodes).values({
-    dramaId: body.drama_id,
-    episodeNumber: nextNum,
-    title: body.title || `第${nextNum}集`,
-    imageConfigId,
-    videoConfigId,
-    // 视频分辨率在创建集时固定（480p/720p/1080p），后续可通过 PUT 修改；各视频适配器再映射为厂商档位
-    resolution: ['480p', '720p', '1080p'].includes(body.resolution) ? body.resolution : '720p',
-    createdAt: ts,
-    updatedAt: ts,
-  })
-
-  const [ep] = await db.select().from(schema.episodes)
-    .where(eq(schema.episodes.id, getInsertId(res)))
+  const ep = db.transaction(tx => {
+    const nextNum = nextEpisodeNumber(tx, body.drama_id)
+    return tx.insert(schema.episodes).values({
+      dramaId: body.drama_id,
+      episodeNumber: nextNum,
+      title: body.title || `第${nextNum}集`,
+      imageConfigId,
+      videoConfigId,
+      resolution: ['480p', '720p', '1080p'].includes(body.resolution) ? body.resolution : '720p',
+      createdAt: ts,
+      updatedAt: ts,
+    }).returning().get()
+  }, { behavior: 'immediate' })
   return success(c, {
     id: ep.id,
     episode_number: ep.episodeNumber,
@@ -133,6 +129,7 @@ app.post('/:id/extract', async (c) => {
   if (!EXTRACT_TARGETS.includes(target)) return badRequest(c, 'target 必须是 characters / scenes / props')
   const [ep] = await db.select().from(schema.episodes).where(eq(schema.episodes.id, id))
   if (!ep) return notFound(c, '剧集不存在')
+  beginEpisodeProduction(ep.dramaId, ep.id)
   const started = startExtraction(ep.id, ep.dramaId, target, { model: body.model || undefined, configId: body.config_id ?? undefined })
   return success(c, { target, status: 'running', already_running: !started })
 })

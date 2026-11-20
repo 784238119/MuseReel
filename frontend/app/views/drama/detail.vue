@@ -55,9 +55,6 @@
         {{ t('detail.tabs.assets') }}
         <span v-if="assetTotal > 0" class="tab-count">{{ assetTotal }}</span>
       </button>
-      <button type="button" :class="['tab-btn', { on: activeTab === 'novel' }]" @click="openNovel">
-        {{ t('novel.title') }}
-      </button>
     </nav>
 
     <ProjectScriptWorkshop v-if="scriptOpened" v-show="activeTab === 'script'" ref="scriptWorkshop" :drama-id="dramaId"
